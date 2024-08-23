@@ -69,6 +69,11 @@ func (g Coins) Nano() *big.Int {
 	return new(big.Int).Set(g.val)
 }
 
+// Cmp 比较数值大小
+func (g Coins) Cmp(s Coins) int {
+	return g.val.Cmp(s.val)
+}
+
 func MustFromDecimal(val string, decimals int) Coins {
 	v, err := FromDecimal(val, decimals)
 	if err != nil {
