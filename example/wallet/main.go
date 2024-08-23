@@ -1,13 +1,13 @@
 /*
 钱包工具：
 1.生成地址：
-（1）.生成新地址
-（2）.根据助记词生成地址
-（3）.根据私钥生成地址
+（1）.生成新地址： --gen_addr_type 0
+（2）.根据助记词生成地址：--gen_addr_type 1
+（3）.根据私钥生成地址： --gen_addr_type 2
 
 2.钱包操作：
-（1）查询钱包余额
-（2）转账
+（1）查询钱包余额：--to_addr 0QB8_1jtzFEA3LIUznSTQtHkp0HhJegU94l5fMEpT5qAJEXX
+（2）转账：--is_transfer --to_addr 0QB8_1jtzFEA3LIUznSTQtHkp0HhJegU94l5fMEpT5qAJEXX --amount 0.01
 */
 package main
 
@@ -37,6 +37,8 @@ func main() {
 	// 转账操作
 	if *isTransfer {
 		TransferTon(*toAddr, *amount, "this is transfer test")
+	} else {
+		// 查询余额
+		GetBalance(*toAddr)
 	}
-
 }
