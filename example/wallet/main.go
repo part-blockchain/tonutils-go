@@ -19,8 +19,10 @@ import (
 var genAddrType = flag.Int("gen_addr_type", 0, "generate address type:"+
 	"[0: generate new address, 1: generate address by mnemonic words, 2: generate address by private key]")
 
-// to地址
+// 是否是转账交易
 var isTransfer = flag.Bool("is_transfer", false, "is transfer")
+
+// to地址
 var toAddr = flag.String("to_addr", "0QB8_1jtzFEA3LIUznSTQtHkp0HhJegU94l5fMEpT5qAJEXX", "receive token address")
 var amount = flag.String("amount", "0.01", "transfer amount")
 

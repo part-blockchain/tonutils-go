@@ -13,6 +13,13 @@ import (
 	"github.com/xssnick/tonutils-go/tvm/cell"
 )
 
+type JettonWalletData struct {
+	Balance          *big.Int
+	OwnerAddr        string
+	JettonMinterAddr string
+	JettonWalletCode *cell.Cell
+}
+
 type TransferPayload struct {
 	_                   tlb.Magic        `tlb:"#0f8a7ea5"`
 	QueryID             uint64           `tlb:"## 64"`
@@ -64,6 +71,50 @@ func (c *WalletClient) GetBalanceAtBlock(ctx context.Context, b *ton.BlockIDExt)
 	}
 
 	return balance, nil
+}
+
+func (c *WalletClient) GetWalletData(ctx context.Context) (*JettonWalletData, error) {
+	b, err := c.master.api.CurrentMasterchainInfo(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get masterchain info: %w", err)
+	}
+	return c.GetWalletDataAtBlock(ctx, b)
+}
+
+func (c *WalletClient) GetWalletDataAtBlock(ctx context.Context, b *ton.BlockIDExt) (*JettonWalletData, error) {
+	res, err := c.master.api.WaitForBlock(b.SeqNo).RunGetMethod(ctx, b, c.addr, "get_wallet_data")
+	if err != nil {
+		if cErr, ok := err.(ton.ContractExecError); ok && cErr.Code == ton.ErrCodeContractNotInitialized {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to run get_wallet_data method: %w", err)
+	}
+
+	data := JettonWalletData{}
+	balance, err := res.Int(0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse balance: %w", err)
+	}
+	data.Balance = balance
+
+	ownerAddrSlice, err := res.Slice(1)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse owner address: %w", err)
+	}
+	data.OwnerAddr = ownerAddrSlice.MustLoadAddr().String()
+
+	jettonMinterAddrSlice, err := res.Slice(2)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse jetton minter address: %w", err)
+	}
+	data.JettonMinterAddr = jettonMinterAddrSlice.MustLoadAddr().String()
+
+	jettonWalletCode, err := res.Cell(3)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse jetton wallet code: %w", err)
+	}
+	data.JettonWalletCode = jettonWalletCode
+	return &data, nil
 }
 
 // Deprecated: use BuildTransferPayloadV2
