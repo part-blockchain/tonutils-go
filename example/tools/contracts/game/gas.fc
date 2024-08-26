@@ -1,0 +1,12 @@
+
+;; settle交易转发手续费
+int settle_forward_gas_fee() asm "50000000 PUSHINT"; ;; 0.05 TON
+
+;; jetton转账交易转发手续费
+int jetton_forward_gas_fee() asm "100000000 PUSHINT"; ;; 0.1 TON
+
+;; 合约交易基础费用
+int base_gas_fee() asm "50000000 PUSHINT"; ;; 0.05 TON
+
+;; bet交易转发手续费
+int bet_forward_gas_fee() asm "50000000 PUSHINT"; ;; 0.05 TON

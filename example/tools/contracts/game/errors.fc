@@ -1,0 +1,36 @@
+;; CrashGame
+const Game_Is_Not_Start = 100;  ;; 游戏状态不是开始状态(0)
+const Game_Is_Not_End = 101;    ;; 游戏状态不是结束状态(1)
+const Error_In_Current_Round = 102;  ;; 当前游戏轮错误
+const Crash_Interval_Not_Reached = 103;  ;; 未到Crash的间隔时间
+const Settlement_Fee_Is_Not_Enough = 104; ;; 结算gas fee不足
+const Sender_Is_Not_Game_Wallet_Addr = 105; ;; 发送者不是玩家的Game Wallet地址
+const Payment_Fee_Is_Not_Enough = 106;      ;; Payment的gas fee不足
+const Sender_Is_Not_Game_Record_Addr = 107; ;; 发送者不是游戏记录地址
+const Sender_Is_Not_Admin_Addr = 108;               ;; 发送者不是crash game的Admin地址，即不是Crash Game的Owner地址
+const Transfer_Jetton_Amount_Is_Zero = 109;         ;; 转账Jetton金额为0
+const Sender_Is_Not_Crash_Game_Jetton_Wallet_Addr = 110;  ;; 发送者不是crash game的jetton wallet地址
+const Bet_Fee_Is_Not_Enough = 111;      ;; Bet的gas fee不足
+const Withdraw_Fee_Is_Not_Enough = 112;      ;; Withdraw的gas fee不足
+
+
+;; GameRecord
+const Sender_Is_Not_Crash_Game_Addr = 200;  ;; 发送者不是crash game地址
+const Crash_Multiple_Error = 201;  ;; 错误的Crash Multiple
+const Game_Record_Settlement_Fee_Is_Not_Enough = 202; ;; GameRecord结算gas fee不足
+const Bet_Amount_Is_Zero = 203;   ;; 下注金额为0
+const Player_Multiple_Must_Greater_Zero = 204;   ;; 玩家乘数必须大于0
+const Player_Multiple_Cannot_Larger_Crash = 205;   ;; 玩家乘数不能大于crash乘数，才算玩家赢
+const Player_Profit_Must_Greater_Zero = 206;   ;; 玩家收益必须大于0
+
+;; GameWallet
+const Player_Double_Bet_On_Current_Round = 300;  ;; 玩家在当前轮游戏重复下注
+const Game_Wallet_Settlement_Fee_Is_Not_Enough = 301; ;; GameWallet结算gas fee不足
+const Settlement_Forward_Gas_Fee_Is_Not_Enough = 302; ;; 结算转发消息gas fee不足
+const Settle_Addr_Is_Not_Game_Wallet_Owner = 303;  ;; 结算地址不是Game Wallet的Owner
+const Withdraw_Addr_Is_Not_Game_Wallet_Owner = 304;  ;; 赎回地址不是Game Wallet的Owner
+
+ ;; 发送者不是Game Wallet的Owner的Jetton Wallet地址，结算到Game Wallet的Owner地址，所以发送excesses消息的是Game Wallet的Owner的Jetton Wallet
+const Sender_Is_Not_Game_Wallet_Owner_Jetton_Wallet_Addr = 305; 
+;; 发送者不是Game Wallet的Jetton Wallet地址，结算到Game Wallet的地址，所以发送transfer_notification消息的是Game Wallet的Jetton Wallet(此方式已废弃，因为还需要从game wallet中赎回)
+const Sender_Is_Not_Game_Wallet_Jetton_Wallet_Addr = 306;  

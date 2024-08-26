@@ -16,24 +16,19 @@ type ContentOffchain struct {
 }
 
 type ContentOnchain struct {
-	Name        string
-	Description string
-	Image       string
-	ImageData   []byte
-	Symbol      string
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Image       string `json:"image"`
+	ImageData   string `json:"image_data"`
+	Symbol      string `json:"symbol"`
 	Decimals    string `json:"decimals"`
-	AmountType  string `json:"amount_type"`
+	AmountStyle string `json:"amount_style"`
 	RenderType  string `json:"render_type"`
 
 	attributes *cell.Dictionary
 }
 
-//type ContentSemichain struct {
-//	ContentOffchain
-//	ContentOnchain
-//}
-
-type JettonMetaData struct {
+type MetaData struct {
 	ContentOffchain
 	ContentOnchain
 }
@@ -70,18 +65,18 @@ func GetContentFromSlice(s *cell.Slice) (ContentAny, error) {
 			Name:        string(getOnchainVal(dict, "name")),
 			Description: string(getOnchainVal(dict, "description")),
 			Image:       string(getOnchainVal(dict, "image")),
-			ImageData:   getOnchainVal(dict, "image_data"),
+			ImageData:   string(getOnchainVal(dict, "image_data")),
 			// attributes:  dict,
-			Symbol:     string(getOnchainVal(dict, "symbol")),
-			Decimals:   string(getOnchainVal(dict, "decimals")),
-			AmountType: string(getOnchainVal(dict, "amount_type")),
-			RenderType: string(getOnchainVal(dict, "render_type")),
+			Symbol:      string(getOnchainVal(dict, "symbol")),
+			Decimals:    string(getOnchainVal(dict, "decimals")),
+			AmountStyle: string(getOnchainVal(dict, "amount_style")),
+			RenderType:  string(getOnchainVal(dict, "render_type")),
 		}
 
 		var content ContentAny
 
 		if uri != "" {
-			content = &JettonMetaData{
+			content = &MetaData{
 				ContentOffchain: ContentOffchain{
 					URI: uri,
 				},
@@ -163,11 +158,12 @@ func (c *ContentOffchain) ContentCell() (*cell.Cell, error) {
 	return cell.BeginCell().MustStoreUInt(0x01, 8).MustStoreStringSnake(c.URI).EndCell(), nil
 }
 
-func (c *JettonMetaData) ContentCell() (*cell.Cell, error) {
+func (c *MetaData) ContentCell() (*cell.Cell, error) {
 	if c.attributes == nil {
 		c.attributes = cell.NewDict(256)
 	}
 
+	// 生成链下数据的cell
 	if c.URI != "" && getOnchainVal(c.attributes, "uri") == nil {
 		ci := cell.BeginCell()
 
@@ -181,7 +177,7 @@ func (c *JettonMetaData) ContentCell() (*cell.Cell, error) {
 			return nil, err
 		}
 	}
-
+	// 生成链上数据的cell
 	return c.ContentOnchain.ContentCell()
 }
 
@@ -225,23 +221,12 @@ func (c *ContentOnchain) GetAttributeBinary(name string) []byte {
 	return getOnchainVal(c.attributes, name)
 }
 
+// ContentCell 生成链上数据的cell
 func (c *ContentOnchain) ContentCell() (*cell.Cell, error) {
 	if c.attributes == nil {
 		c.attributes = cell.NewDict(256)
 	}
 
-	if len(c.Image) > 0 {
-		err := setOnchainVal(c.attributes, "image", []byte(c.Image))
-		if err != nil {
-			return nil, fmt.Errorf("failed to store image: %w", err)
-		}
-	}
-	if len(c.ImageData) > 0 {
-		err := setOnchainVal(c.attributes, "image_data", c.ImageData)
-		if err != nil {
-			return nil, fmt.Errorf("failed to store image_data: %w", err)
-		}
-	}
 	if len(c.Name) > 0 {
 		err := setOnchainVal(c.attributes, "name", []byte(c.Name))
 		if err != nil {
@@ -254,6 +239,58 @@ func (c *ContentOnchain) ContentCell() (*cell.Cell, error) {
 			return nil, fmt.Errorf("failed to store description: %w", err)
 		}
 	}
+	if len(c.Image) > 0 {
+		err := setOnchainVal(c.attributes, "image", []byte(c.Image))
+		if err != nil {
+			return nil, fmt.Errorf("failed to store image: %w", err)
+		}
+	}
+	if len(c.ImageData) > 0 {
+		err := setOnchainVal(c.attributes, "image_data", []byte(c.ImageData))
+		if err != nil {
+			return nil, fmt.Errorf("failed to store image_data: %w", err)
+		}
+	}
+	if len(c.Symbol) > 0 {
+		err := setOnchainVal(c.attributes, "symbol", []byte(c.Symbol))
+		if err != nil {
+			return nil, fmt.Errorf("failed to store symbol: %w", err)
+		}
+	}
+	if len(c.Decimals) > 0 {
+		err := setOnchainVal(c.attributes, "decimals", []byte(c.Decimals))
+		if err != nil {
+			return nil, fmt.Errorf("failed to store decimals: %w", err)
+		}
+	}
+
+	if len(c.AmountStyle) > 0 {
+		err := setOnchainVal(c.attributes, "amount_style", []byte(c.AmountStyle))
+		if err != nil {
+			return nil, fmt.Errorf("failed to store amount_style: %w", err)
+		}
+	}
+	if len(c.RenderType) > 0 {
+		err := setOnchainVal(c.attributes, "render_type", []byte(c.RenderType))
+		if err != nil {
+			return nil, fmt.Errorf("failed to store render_type: %w", err)
+		}
+	}
 
 	return cell.BeginCell().MustStoreUInt(0x00, 8).MustStoreDict(c.attributes).EndCell(), nil
+}
+
+// GenJettonContentCell 生成jetton content的cell
+func GenJettonContentCell(content ContentAny) (*cell.Cell, error) {
+	if content == nil {
+		return cell.BeginCell().EndCell(), nil
+	}
+	// 链下参数
+	if off, ok := content.(*ContentOffchain); ok {
+		// https://github.com/ton-blockchain/TIPs/issues/64
+		// Standard says that prefix should be 0x01, but looks like it was misunderstanding in other implementations and 0x01 was dropped
+		// so, we make compatibility
+		return cell.BeginCell().MustStoreStringSnake(off.URI).EndCell(), nil
+	}
+	return content.ContentCell()
 }

@@ -1,0 +1,146 @@
+#include "../lib/stdlib.fc";
+#include "op-codes.fc";
+#include "gas.fc";
+#include "errors.fc";
+
+;; load_data populates storage variables using stored data
+(int, int, int, int, slice, slice, cell) load_data() impure {
+    slice ds = get_data().begin_parse();
+    return (ds~load_uint(32), ;; 轮数
+            ds~load_uint(32), ;; Crash乘数
+            ds~load_uint(32), ;; 游戏状态: 0-bet, 1-进行中, 2-游戏结束/未启动
+            ds~load_uint(32), ;; 玩家数量
+            ;; ds~load_uint(32), ;; 已结算玩家数量
+            ds~load_msg_addr(), ;; crash_game_addr
+            ds~load_msg_addr(), ;; jetton_minter_addr
+            ds~load_ref()  ;; jetton_wallet_code
+    );
+}
+
+;; save_data stores storage variables as a cell into persistent storage
+() save_data(int round_num, int crash_multiple, int game_state, int player_nums, slice crash_game_addr, slice jetton_minter_addr,
+             cell jetton_wallet_code) impure {
+    set_data(
+        begin_cell()
+            .store_uint(round_num, 32)
+            .store_uint(crash_multiple, 32)
+            .store_uint(game_state, 32)
+            .store_uint(player_nums, 32)
+            .store_slice(crash_game_addr)
+            .store_slice(jetton_minter_addr)
+            .store_ref(jetton_wallet_code)
+        .end_cell()
+    );
+}
+
+;; 向game_record转发支付消息
+() settlement(slice crash_game_addr, int forward_gas_fee, cell payment_msg) impure {
+    var msg = begin_cell()
+        .store_uint(0x18, 6)
+        .store_slice(crash_game_addr)
+        .store_coins(forward_gas_fee)
+        .store_uint(1, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+        .store_ref(payment_msg);
+
+    send_raw_message(msg.end_cell(), 1);
+}
+
+;; recv_internal is the main function of the contract and is called when it receives a message from other contracts
+() recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
+    if (in_msg_body.slice_empty?()) { ;; ignore all empty messages
+        return ();
+    }
+
+    slice cs = in_msg_full.begin_parse();
+    int flags = cs~load_uint(4);
+    if (flags & 1) { ;; ignore all bounced messages
+        return ();
+    }
+
+    slice sender_address = cs~load_msg_addr();
+    int op = in_msg_body~load_uint(32); ;; by convention, the first 32 bits of incoming message is the op
+    int query_id = in_msg_body~load_uint(64); ;; also by convention, the next 64 bits contain the "query id", although this is not always the case
+    
+    (int round_num, int crash_multiple, int game_state, int player_nums, slice crash_game_addr, slice jetton_minter_addr, cell jetton_wallet_code) = load_data(); ;; here we populate the storage variables
+
+    ;; 获取当前轮数
+    int cur_round_num = in_msg_body~load_uint(32);
+    if(op == op::write_record()) {
+        ;; crash_game_addr才有权限写入日志
+        throw_unless(Sender_Is_Not_Crash_Game_Addr, equal_slices(sender_address, crash_game_addr));
+        throw_unless(Error_In_Current_Round, cur_round_num == round_num);
+        throw_unless(Game_Is_Not_Start, game_state == 0);
+
+        crash_multiple = in_msg_body~load_uint(32);
+        throw_unless(Crash_Multiple_Error, crash_multiple > 0);
+
+        ;; 玩家数量
+        player_nums = in_msg_body~load_uint(32);
+
+        ;; 保存状态
+        save_data(round_num, crash_multiple, 1, player_nums, crash_game_addr, jetton_minter_addr, jetton_wallet_code);
+        
+        return ();
+    } elseif(op == op::settlement()) {
+        int forward_fee = jetton_forward_gas_fee();
+        int base_fee = base_gas_fee();
+        ;; 校验手续费是否足够
+        throw_unless(Game_Record_Settlement_Fee_Is_Not_Enough, msg_value >= (forward_fee + 3 * base_fee));
+
+        throw_unless(Error_In_Current_Round, cur_round_num == round_num);
+        ;; crash_game_addr才有转发结算消息
+        throw_unless(Sender_Is_Not_Crash_Game_Addr, equal_slices(sender_address, crash_game_addr));
+        ;; 游戏结束才允许结算
+        throw_unless(Game_Is_Not_End, game_state == 1);
+
+        ;; 玩家的下注数
+        int bet_amount = in_msg_body~load_coins();
+        throw_unless(Bet_Amount_Is_Zero, bet_amount > 0);
+        ;; 玩家的乘数（必须大于0）
+        int multiple = in_msg_body~load_uint(32);
+        throw_unless(Player_Multiple_Must_Greater_Zero, multiple > 0);
+        ;; 只有玩家的mutliple不大于游戏的crash multiple，玩家才胜利
+        throw_unless(Player_Multiple_Cannot_Larger_Crash, multiple <= crash_multiple);
+        ;; 源头消息发送者
+        slice org_sender_addr = in_msg_body~load_msg_addr();
+        ;; 结算地址, 结算到game wallet的jetton钱包, 并在game wallet中响应tranfer notify消息，处理结算消息结果
+        ;; slice user_game_wallet_addr = in_msg_body~load_msg_addr(); 
+        ;; 结算地址，接收token地址
+        slice settle_user_addr = in_msg_body~load_msg_addr();
+        
+        ;; 结算公式
+        int profit = muldiv(bet_amount, multiple, 100); ;; multiple帶%
+        throw_unless(Player_Profit_Must_Greater_Zero, profit > 0);
+
+        ;; 转发给crashgame的结算消息
+        var payment_msg = begin_cell()
+                .store_uint(op::payment(), 32)
+                .store_uint(query_id, 64)
+                .store_uint(round_num, 32)
+                .store_coins(profit)
+                .store_slice(org_sender_addr) ;; 源头消息发送者，可以不是本game wallet owner发起结算请求，剩余的手续费要还给发起者
+                ;; .store_slice(user_game_wallet_addr) ;; 结算地址, 结算到game wallet的jetton钱包
+                .store_slice(settle_user_addr)  ;; 结算地址，接收token地址
+            .end_cell();        
+        int forward_gas_fee = msg_value - base_gas_fee();
+        settlement(crash_game_addr, forward_gas_fee, payment_msg);
+        ;; 保存状态
+        ;; 统计结算玩家的数量
+        ;; save_data(round_num, crash_multiple, game_state, player_nums, crash_game_addr, jetton_minter_addr, jetton_wallet_code);
+        
+        return ();
+    }
+
+    ;; 允许向合约进行转账（资金池）
+    throw(0xffff); ;; if the message contains an op that is not known to this contract, we throw
+}
+
+;; get methods are a means to conveniently read contract data using, for example, HTTP APIs
+;; they are marked with method_id
+;; note that unlike in many other smart contract VMs, get methods cannot be called by other contracts
+
+
+;; 获取记录
+(int, int, int, int, slice, slice, cell) get_info() method_id {
+    return load_data();
+}

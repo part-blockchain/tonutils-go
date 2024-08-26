@@ -1,0 +1,211 @@
+#include "../lib/stdlib.fc";
+#include "op-codes.fc";
+#include "../jetton/jetton-utils.fc";
+#include "gas.fc";
+#include "errors.fc";
+
+;; load_data populates storage variables using stored data
+(int, int, int, slice, slice, slice, cell) load_data() impure {
+    slice ds = get_data().begin_parse();
+    return (ds~load_uint(32), ;; 轮数
+            ds~load_coins(), ;; 下注数
+            ds~load_uint(32), ;; player指定的乘数
+            ds~load_msg_addr(), ;; owner_wallet_addr
+            ds~load_msg_addr(),  ;; crash_game_addr
+            ds~load_msg_addr(), ;; jetton_minter_addr
+            ds~load_ref()   ;; jetton_wallet_code
+    );
+}
+
+;; save_data stores storage variables as a cell into persistent storage
+() save_data(int round_num, int bet_amount, int multiple, slice owner_wallet_addr, 
+             slice crash_game_addr, slice jetton_minter_addr, cell jetton_wallet_code) impure {
+    set_data(
+        begin_cell()
+            .store_uint(round_num, 32)
+            .store_coins(bet_amount)
+            .store_uint(multiple, 32)
+            .store_slice(owner_wallet_addr)
+            .store_slice(crash_game_addr)
+            .store_slice(jetton_minter_addr)
+            .store_ref(jetton_wallet_code)
+        .end_cell()
+    );
+}
+
+;; withdraw 赎回
+() withdraw(int query_id, int msg_value, slice in_msg_body, slice sender_addr, slice jetton_minter_addr, cell jetton_wallet_code) impure {
+    
+    int withdraw_amount = in_msg_body~load_coins();    ;; 赎回金额
+    slice receive_addr = in_msg_body~load_msg_addr();   ;; token接收者
+    ;; 接收者不能是game wallet合約地址(自己转给自己无意义)
+    throw_if(74, equal_slices(receive_addr, my_address()));
+    int jetton_forward_gas_fee = jetton_forward_gas_fee();
+    int base_gas_fee = base_gas_fee();
+    throw_unless(77, msg_value >= (jetton_forward_gas_fee + 2 * base_gas_fee));
+    
+    cell state_init = calculate_jetton_wallet_state_init(my_address(), jetton_minter_addr, jetton_wallet_code);
+    slice to_jetton_wallet_addr = calculate_jetton_wallet_address(state_init);
+
+    ;; 创建一个空的cell
+    var emptyCell = begin_cell().end_cell();
+
+    ;; 转账jetton给crash_game_addr
+    var transfer_msg = begin_cell()
+            .store_uint(op::transfer(), 32)
+            .store_uint(query_id, 64)
+            .store_coins(withdraw_amount) ;; 赎回金额
+            .store_slice(receive_addr) ;; to address
+            .store_slice(sender_addr)  ;; reponse address
+            .store_maybe_ref(emptyCell)
+            .store_coins(jetton_forward_gas_fee)
+            .store_maybe_ref(emptyCell)
+        .end_cell();
+
+    var msg = begin_cell()
+        .store_uint(0x18, 6)
+        .store_slice(to_jetton_wallet_addr)
+        .store_coins(msg_value - base_gas_fee)
+        .store_uint(4 + 2 + 1, 1 + 4 + 4 + 64 + 32 + 1 + 1 + 1)
+        .store_ref(state_init)
+        .store_ref(transfer_msg);     ;; 转账jetton token消息
+    send_raw_message(msg.end_cell(), 1); ;; pay transfer fees separately, revert on errors
+}
+
+
+;; settlement 结算
+() settlement(int query_id, int round_num, int bet_amount, int multiple, slice sender_addr, slice settle_user_addr, 
+              slice crash_game_addr, int forward_gas_fee) impure {
+    
+    ;; 转发结算消息给CrashGame
+    var settle_msg = begin_cell()
+            .store_uint(op::settlement(), 32)
+            .store_uint(query_id, 64)
+            .store_uint(round_num, 32)
+            .store_coins(bet_amount)
+            .store_uint(multiple, 32)
+            .store_slice(sender_addr) ;; 消息发送者，发起结算请求的人
+            .store_slice(settle_user_addr) ;; 结算地址，接收token地址
+        .end_cell();
+
+    var msg = begin_cell()
+        .store_uint(0x18, 6)
+        .store_slice(crash_game_addr)
+        .store_coins(forward_gas_fee)
+        .store_uint(1, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+        .store_ref(settle_msg);
+
+    send_raw_message(msg.end_cell(), 1);
+}
+
+;; recv_internal is the main function of the contract and is called when it receives a message from other contracts
+() recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
+    if (in_msg_body.slice_empty?()) { ;; ignore all empty messages
+        return ();
+    }
+
+    slice cs = in_msg_full.begin_parse();
+    int flags = cs~load_uint(4);
+    if (flags & 1) { ;; ignore all bounced messages
+        return ();
+    }
+
+    slice sender_address = cs~load_msg_addr();
+    int op = in_msg_body~load_uint(32); ;; by convention, the first 32 bits of incoming message is the op
+    int query_id = in_msg_body~load_uint(64); ;; also by convention, the next 64 bits contain the "query id", although this is not always the case
+
+    (int round_num, int bet_amount, int multiple, slice owner_wallet_addr, 
+     slice crash_game_addr, slice jetton_minter_addr, cell jetton_wallet_code) = load_data(); ;; here we populate the storage variables
+
+    if (op == op::bet()) {
+        ;; 收到crash_game转发过来的bet消息，判断消息发送者是否是CrashGame合约地址
+        throw_unless(Sender_Is_Not_Crash_Game_Addr, equal_slices(sender_address, crash_game_addr));
+
+        ;; 判断之前轮游戏是否结算(存在输的玩家，不需要结算)
+        int cur_round_num = in_msg_body~load_uint(32);
+        ;; 获取游戏的轮数，判断是否已经下注（避免重复下注）
+        throw_unless(Player_Double_Bet_On_Current_Round, cur_round_num > round_num);
+
+        ;; 获取下注数
+        bet_amount = in_msg_body~load_coins();
+        throw_unless(Bet_Amount_Is_Zero, bet_amount > 0);
+        ;; 获取乘数
+        multiple = in_msg_body~load_uint(32);
+        throw_unless(Player_Multiple_Must_Greater_Zero, multiple > 0);
+        
+        ;; 保存数据
+        save_data(cur_round_num, bet_amount, multiple, owner_wallet_addr, crash_game_addr, jetton_minter_addr, jetton_wallet_code);
+        return ();
+    } elseif(op == op::settlement()) {
+        int cur_round_num = in_msg_body~load_uint(32);
+        ;; 获取游戏的轮数，判断是否是结算的游戏轮
+        throw_unless(Error_In_Current_Round, cur_round_num == round_num);
+        throw_unless(Bet_Amount_Is_Zero, bet_amount > 0);
+        throw_unless(Player_Multiple_Must_Greater_Zero, multiple > 0);
+        ;; 转发消息到CrashGame, 包括（round_num, bet_amount, multiple）
+        int forward_gas_fee = in_msg_body~load_coins();
+        throw_unless(Game_Wallet_Settlement_Fee_Is_Not_Enough, msg_value >= (forward_gas_fee + base_gas_fee()));
+        ;; 消息还需要转发四次
+        throw_unless(Settlement_Forward_Gas_Fee_Is_Not_Enough, forward_gas_fee >= (jetton_forward_gas_fee() + 4 * base_gas_fee()));
+        ;; 获取结算用户地址（接收token地址）
+        slice settle_user_addr = in_msg_body~load_msg_addr();
+        ;; 结算用户地址为game wallet的拥有者
+        throw_unless(Settle_Addr_Is_Not_Game_Wallet_Owner, equal_slices(owner_wallet_addr, settle_user_addr));
+        ;; 结算消息添加玩家信息
+        settlement(query_id, round_num, bet_amount, multiple, sender_address, settle_user_addr, crash_game_addr, forward_gas_fee);
+
+        ;; 保存随机数和结果(最后在token转账成功后再修改，即excesses操作上进行修改)
+        ;; save_data(round_num, 0, 0, owner_wallet_addr, crash_game_addr, jetton_minter_addr, jetton_wallet_code);
+        return ();
+    } elseif(op == op::withdraw()) {
+        ;; 只有用户自己可以赎回jetton
+        throw_unless(Withdraw_Addr_Is_Not_Game_Wallet_Owner, equal_slices(sender_address, owner_wallet_addr));
+        withdraw(query_id, msg_value, in_msg_body, sender_address, jetton_minter_addr, jetton_wallet_code);
+    } elseif(op == op::excesses()) {
+        ;; 发送者是game wallet的owner（结算地址）的jetton wallet地址
+        slice owner_jetton_wallet_addr = calculate_user_jetton_wallet_address(owner_wallet_addr, jetton_minter_addr, jetton_wallet_code);
+        throw_unless(Sender_Is_Not_Game_Wallet_Owner_Jetton_Wallet_Addr, equal_slices(owner_jetton_wallet_addr, sender_address));
+        
+        ;; 保存随机数和结果(最后修改)
+        save_data(round_num, 0, 0, owner_wallet_addr, crash_game_addr, jetton_minter_addr, jetton_wallet_code);
+        return ();
+    } elseif(op == op::transfer_notification()) {
+        ;; 此方式适合将token结算到game wallet中，但是需要赎回操作（废弃）
+        ;; 发送金额和发送者
+        (int jetton_amount, slice from_user) = (in_msg_body~load_coins(), in_msg_body~load_msg_addr());
+        throw_unless(Transfer_Jetton_Amount_Is_Zero, jetton_amount > 0);
+
+        ;; 发送者是game wallet的jetton wallet地址
+        slice game_wallet_jetton_wallet_addr = calculate_user_jetton_wallet_address(my_address(), jetton_minter_addr, jetton_wallet_code);
+        throw_unless(Sender_Is_Not_Game_Wallet_Jetton_Wallet_Addr, equal_slices(game_wallet_jetton_wallet_addr, sender_address));
+
+        cell payload = in_msg_body~load_ref(); 
+        slice payload_msg = payload.begin_parse();
+
+        ;; 检查是否有payload
+        if (payload_msg.slice_empty?()) { ;; ignore empty messages
+            return ();
+        }
+
+        int notify_op = payload_msg~load_uint(32);
+        if(notify_op == op::settlement()) {
+            ;; 处理settlement消息
+            save_data(round_num, 0, 0, owner_wallet_addr, crash_game_addr, jetton_minter_addr, jetton_wallet_code);
+            return ();
+        }
+        return ();
+    } 
+
+    ;; throw(0xffff); ;; if the message contains an op that is not known to this contract, we throw
+}
+
+;; get methods are a means to conveniently read contract data using, for example, HTTP APIs
+;; they are marked with method_id
+;; note that unlike in many other smart contract VMs, get methods cannot be called by other contracts
+
+
+(int, int, int, slice, slice, slice, cell) get_info() method_id {
+   return load_data(); 
+}
+
+

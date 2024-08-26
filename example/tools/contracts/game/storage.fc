@@ -1,0 +1,52 @@
+global int storage::round_num;
+global int storage::game_state;
+global int storage::seed;
+global int storage::crash_multiple;
+global int storage::player_nums;
+global int storage::start_unix_time;
+global int storage::start_tx_time;
+global int storage::start_blk_time;
+global int storage::min_interval_time;
+global slice storage::admin_addr;
+global slice storage::jetton_minter_addr;
+global cell storage::jetton_wallet_code;
+global cell storage::game_wallet_code;
+global cell storage::game_record_code;
+
+() load_storage() impure inline {
+    slice ds = get_data().begin_parse();
+
+    storage::round_num = ds~load_uint(32); ;; 轮数
+    storage::game_state = ds~load_uint(32); ;; 游戏状态: 0-bet; 1-游戏结束/未启动
+    storage::seed = ds~load_uint(32); ;; 随机数种子
+    storage::crash_multiple = ds~load_uint(32); ;; Crash乘数
+    storage::player_nums = ds~load_uint(32); ;; 玩家数量
+    storage::start_unix_time = ds~load_uint(32); ;; 开始unix时间
+    storage::start_tx_time = ds~load_uint(64); ;; 开始交易时间
+    storage::start_blk_time = ds~load_uint(64); ;; 开始区块时间
+    storage::min_interval_time = ds~load_uint(32); ;; 一轮游戏从创建完成到crash的最小时间间隔(s)
+    storage::admin_addr = ds~load_msg_addr(); ;; admin_addr
+    storage::jetton_minter_addr = ds~load_msg_addr(); ;; jetton_minter_addr
+    storage::jetton_wallet_code = ds~load_ref();  ;; jetton_wallet_code
+    storage::game_wallet_code = ds~load_ref();  ;; game_wallet_code
+    storage::game_record_code = ds~load_ref();  ;; game_record_code
+}
+
+() save_storage() impure inline {
+    set_data(begin_cell()
+        .store_uint(storage::round_num, 32)
+        .store_uint(storage::game_state, 32)
+        .store_uint(storage::seed, 32)
+        .store_uint(storage::crash_multiple, 32)
+        .store_uint(storage::player_nums, 32)
+        .store_uint(storage::start_unix_time, 32)
+        .store_uint(storage::start_tx_time, 64)
+        .store_uint(storage::start_blk_time, 64)
+        .store_uint(storage::min_interval_time, 32)
+        .store_slice(storage::admin_addr)
+        .store_slice(storage::jetton_minter_addr)
+        .store_ref(storage::jetton_wallet_code)
+        .store_ref(storage::game_wallet_code)
+        .store_ref(storage::game_record_code)
+    .end_cell());
+}

@@ -3,15 +3,18 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/xssnick/tonutils-go/address"
 	"github.com/xssnick/tonutils-go/tlb"
 	"github.com/xssnick/tonutils-go/ton/jetton"
-	"github.com/xssnick/tonutils-go/ton/nft"
 	"github.com/xssnick/tonutils-go/ton/wallet"
 	"github.com/xssnick/tonutils-go/tvm/cell"
+	"io/ioutil"
 	"log"
+	"math/big"
+	"os"
 	"strings"
 )
 
@@ -28,70 +31,76 @@ func GenWalletByMnemonicWords(api wallet.TonAPI, seeds string, version wallet.Ve
 
 	return nil, w
 }
-func getNFTCollectionCode() *cell.Cell {
-	var hexBOC = "b5ee9c724102140100021f000114ff00f4a413f4bcf2c80b0102016202030202cd04050201200e0f04e7d10638048adf000e8698180b8d848adf07d201800e98fe99ff6a2687d20699fea6a6a184108349e9ca829405d47141baf8280e8410854658056b84008646582a802e78b127d010a65b509e58fe59f80e78b64c0207d80701b28b9e382f970c892e000f18112e001718112e001f181181981e0024060708090201200a0b00603502d33f5313bbf2e1925313ba01fa00d43028103459f0068e1201a44343c85005cf1613cb3fccccccc9ed54925f05e200a6357003d4308e378040f4966fa5208e2906a4208100fabe93f2c18fde81019321a05325bbf2f402fa00d43022544b30f00623ba9302a402de04926c21e2b3e6303250444313c85005cf1613cb3fccccccc9ed54002c323401fa40304144c85005cf1613cb3fccccccc9ed54003c8e15d4d43010344130c85005cf1613cb3fccccccc9ed54e05f04840ff2f00201200c0d003d45af0047021f005778018c8cb0558cf165004fa0213cb6b12ccccc971fb008002d007232cffe0a33c5b25c083232c044fd003d0032c03260001b3e401d3232c084b281f2fff2742002012010110025bc82df6a2687d20699fea6a6a182de86a182c40043b8b5d31ed44d0fa40d33fd4d4d43010245f04d0d431d430d071c8cb0701cf16ccc980201201213002fb5dafda89a1f481a67fa9a9a860d883a1a61fa61ff480610002db4f47da89a1f481a67fa9a9a86028be09e008e003e00b01a500c6e"
-	codeCellBytes, _ := hex.DecodeString(hexBOC)
 
-	codeCell, err := cell.FromBOC(codeCellBytes)
+// 获取jetton minter code
+func getJettonMinterCode(jettonMinterCodeFilePath string) *cell.Cell {
+	if "" == jettonMinterCodeFilePath {
+		dir, _ := os.Getwd()
+		jettonMinterCodeFilePath = fmt.Sprintf("%s/example/tools/contracts/build/jetton-minter.cell", dir)
+	}
+	fmt.Printf("jetton minter code file path: %s\n", jettonMinterCodeFilePath)
+	data, err := ioutil.ReadFile(jettonMinterCodeFilePath)
 	if err != nil {
+		fmt.Println("get jetton minter code failed:", err)
+		return nil
+	}
+	// 读取文件内容
+	codeCell, err := cell.FromBOC(data)
+	if err != nil {
+		fmt.Println("get jetton minter code failed:", err)
 		panic(err)
 	}
 
 	return codeCell
 }
 
-func getNFTItemCode() *cell.Cell {
-	var hexBOC = "b5ee9c7241020d010001d0000114ff00f4a413f4bcf2c80b0102016202030202ce04050009a11f9fe00502012006070201200b0c02d70c8871c02497c0f83434c0c05c6c2497c0f83e903e900c7e800c5c75c87e800c7e800c3c00812ce3850c1b088d148cb1c17cb865407e90350c0408fc00f801b4c7f4cfe08417f30f45148c2ea3a1cc840dd78c9004f80c0d0d0d4d60840bf2c9a884aeb8c097c12103fcbc20080900113e910c1c2ebcb8536001f65135c705f2e191fa4021f001fa40d20031fa00820afaf0801ba121945315a0a1de22d70b01c300209206a19136e220c2fff2e192218e3e821005138d91c85009cf16500bcf16712449145446a0708010c8cb055007cf165005fa0215cb6a12cb1fcb3f226eb39458cf17019132e201c901fb00104794102a375be20a00727082108b77173505c8cbff5004cf1610248040708010c8cb055007cf165005fa0215cb6a12cb1fcb3f226eb39458cf17019132e201c901fb000082028e3526f0018210d53276db103744006d71708010c8cb055007cf165005fa0215cb6a12cb1fcb3f226eb39458cf17019132e201c901fb0093303234e25502f003003b3b513434cffe900835d27080269fc07e90350c04090408f80c1c165b5b60001d00f232cfd633c58073c5b3327b5520bf75041b"
-	codeCellBytes, _ := hex.DecodeString(hexBOC)
-
-	codeCell, err := cell.FromBOC(codeCellBytes)
+// 获取jetton wallet code
+func getJettonWalletCode(jettonWalletCodeFilePath string) *cell.Cell {
+	if "" == jettonWalletCodeFilePath {
+		dir, _ := os.Getwd()
+		jettonWalletCodeFilePath = fmt.Sprintf("%s/example/tools/contracts/build/jetton-wallet.cell", dir)
+	}
+	fmt.Printf("jetton wallet code file path: %s\n", jettonWalletCodeFilePath)
+	data, err := ioutil.ReadFile(jettonWalletCodeFilePath)
 	if err != nil {
+		fmt.Println("get jetton wallet code failed:", err)
+		return nil
+	}
+	// 读取文件内容
+	codeCell, err := cell.FromBOC(data)
+	if err != nil {
+		fmt.Println("get jetton wallet code failed:", err)
 		panic(err)
 	}
 
 	return codeCell
 }
 
-func getContractData(collectionOwnerAddr, royaltyAddr *address.Address) *cell.Cell {
-	// storage schema
-	// default#_ royalty_factor:uint16 royalty_base:uint16 royalty_address:MsgAddress = RoyaltyParams;
-	// storage#_ owner_address:MsgAddress next_item_index:uint64
-	//           ^[collection_content:^Cell common_content:^Cell]
-	//           nft_item_code:^Cell
-	//           royalty_params:^RoyaltyParams
-	//           = Storage;
+// getDeployJettonMinterData 获取部署Jetton Minter的data
+func getDeployJettonMinterData(totalSupply *big.Int, owner *address.Address,
+	content jetton.ContentAny, jettonWalletCode *cell.Cell) (_ *cell.Cell, err error) {
 
-	royalty := cell.BeginCell().
-		MustStoreUInt(5, 16). // 5% royalty
-		MustStoreUInt(100, 16). // denominator
-		MustStoreAddr(royaltyAddr). // fee addr destination
+	conData, err := jetton.GenJettonContentCell(content)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert jetton minter content to cell: %w", err)
+	}
+	fmt.Printf("jetton content cell hash: %s\n", hex.EncodeToString(conData.Hash()))
+	data := cell.BeginCell().
+		MustStoreUInt(totalSupply.Uint64(), 64).
+		MustStoreAddr(owner).
+		MustStoreRef(conData).
+		MustStoreRef(jettonWalletCode).
 		EndCell()
 
-	// collection data
-	collectionContent := nft.ContentOffchain{URI: "https://tonutils.com/collection.json"}
-	collectionContentCell, _ := collectionContent.ContentCell()
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert depoly jetton minter data to cell: %w", err)
+	}
 
-	// prefix for NFTs data
-	uri := "https://tonutils.com/nft/"
-	commonContentCell := cell.BeginCell().MustStoreStringSnake(uri).EndCell()
-
-	contentRef := cell.BeginCell().
-		MustStoreRef(collectionContentCell).
-		MustStoreRef(commonContentCell).
-		EndCell()
-
-	data := cell.BeginCell().MustStoreAddr(collectionOwnerAddr).
-		MustStoreUInt(0, 64).
-		MustStoreRef(contentRef).
-		MustStoreRef(getNFTItemCode()).
-		MustStoreRef(royalty).
-		EndCell()
-
-	return data
+	return data, nil
 }
 
 // DeployJettonMinter 部署Jetton Minter合约
-func DeployJettonMinter(filePath string) error {
+func DeployJettonMinter(jettonMinterCodeFile, jettonWalletCodeFile string) error {
 	if nil == TonAPI {
 		TonAPI = GetTonAPIIns()
 		if nil == TonAPI {
@@ -105,17 +114,28 @@ func DeployJettonMinter(filePath string) error {
 	}
 
 	log.Println("Deploy wallet:", w.WalletAddress().String())
-
 	msgBody := cell.BeginCell().EndCell()
 
-	fmt.Println("Deploying NFT collection contract to mainnet...")
+	fmt.Println("Deploying jetton minter contract to ton blockchain...")
+	// 生成jetton minter合约的content
+	content := jetton.MetaData{}
+	if err = json.Unmarshal([]byte(JettonContentCfg), &content); nil != err {
+		errMsg := fmt.Sprintf("unmarshal jetton content config failed:%v", err)
+		fmt.Println(errMsg)
+		return errors.New(errMsg)
+	}
+	// 生成部署合约数据（初始化合约数据）
+	deployData, err := getDeployJettonMinterData(big.NewInt(0), w.WalletAddress(), &content, getJettonWalletCode(jettonWalletCodeFile))
+	if nil != err {
+		return errors.New("get Deploy Jetton Minter Data failed")
+	}
 	addr, _, _, err := w.DeployContractWaitTransaction(context.Background(), tlb.MustFromTON("0.05"),
-		msgBody, getNFTCollectionCode(), getContractData(w.WalletAddress(), w.WalletAddress()))
+		msgBody, getJettonMinterCode(jettonMinterCodeFile), deployData)
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Println("Deployed contract addr:", addr.String())
+	fmt.Printf("Deployed contract: https://testnet.tonviewer.com/%s\n", addr.String())
 	return nil
 }
 
@@ -146,7 +166,7 @@ func GetJettonData(jettonMinterAddr string) (error, *jetton.Data) {
 		log.Fatal(err)
 	}
 
-	content := data.Content.(*jetton.JettonMetaData)
+	content := data.Content.(*jetton.MetaData)
 	log.Println("total supply:", data.TotalSupply.Uint64())
 	log.Println("mintable:", data.Mintable)
 	log.Println("admin addr:", data.AdminAddr)
@@ -156,8 +176,9 @@ func GetJettonData(jettonMinterAddr string) (error, *jetton.Data) {
 	log.Println("	Symbol:", content.Symbol)
 	log.Println("	Decimals:", content.Decimals)
 	log.Println("	Image:", content.Image)
+	log.Println("	ImageData:", content.ImageData)
 	log.Println("	URI:", content.URI) // 链下
-	log.Println("	AmountType:", content.AmountType)
+	log.Println("	AmountStyle:", content.AmountStyle)
 	log.Println("	RenderType:", content.RenderType)
 
 	return nil, data
