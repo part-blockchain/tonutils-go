@@ -31,4 +31,6 @@ func main() {
 	} else if *opType == 1 {
 		GetJettonWallet(*jettonMinterAddr, *jettonWalletOwner)
 	}
+
+	// DeployJettonMinter()
 }

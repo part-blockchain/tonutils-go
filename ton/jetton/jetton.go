@@ -9,7 +9,6 @@ import (
 	"github.com/xssnick/tonutils-go/address"
 	"github.com/xssnick/tonutils-go/tlb"
 	"github.com/xssnick/tonutils-go/ton"
-	"github.com/xssnick/tonutils-go/ton/nft"
 	"github.com/xssnick/tonutils-go/tvm/cell"
 )
 
@@ -49,7 +48,7 @@ type Data struct {
 	TotalSupply *big.Int
 	Mintable    bool
 	AdminAddr   *address.Address
-	Content     nft.ContentAny
+	Content     ContentAny
 	WalletCode  *cell.Cell
 }
 
@@ -134,7 +133,8 @@ func (c *Client) GetJettonDataAtBlock(ctx context.Context, b *ton.BlockIDExt) (*
 		return nil, fmt.Errorf("content cell get err: %w", err)
 	}
 
-	content, err := nft.ContentFromCell(contentCell)
+	// 解析cell, 获取jetton的content信息
+	content, err := GetContentFromCell(contentCell)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load content from contentCell: %w", err)
 	}

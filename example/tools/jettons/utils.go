@@ -12,7 +12,6 @@ import (
 	"github.com/xssnick/tonutils-go/ton/wallet"
 	"github.com/xssnick/tonutils-go/tvm/cell"
 	"log"
-	"strconv"
 	"strings"
 )
 
@@ -63,8 +62,8 @@ func getContractData(collectionOwnerAddr, royaltyAddr *address.Address) *cell.Ce
 	//           = Storage;
 
 	royalty := cell.BeginCell().
-		MustStoreUInt(5, 16).       // 5% royalty
-		MustStoreUInt(100, 16).     // denominator
+		MustStoreUInt(5, 16). // 5% royalty
+		MustStoreUInt(100, 16). // denominator
 		MustStoreAddr(royaltyAddr). // fee addr destination
 		EndCell()
 
@@ -92,7 +91,7 @@ func getContractData(collectionOwnerAddr, royaltyAddr *address.Address) *cell.Ce
 }
 
 // DeployJettonMinter 部署Jetton Minter合约
-func DeployJettonMinter() error {
+func DeployJettonMinter(filePath string) error {
 	if nil == TonAPI {
 		TonAPI = GetTonAPIIns()
 		if nil == TonAPI {
@@ -146,22 +145,21 @@ func GetJettonData(jettonMinterAddr string) (error, *jetton.Data) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	decimals := 9
-	content := data.Content.(*nft.ContentSemichain)
+
+	content := data.Content.(*jetton.JettonMetaData)
 	log.Println("total supply:", data.TotalSupply.Uint64())
 	log.Println("mintable:", data.Mintable)
 	log.Println("admin addr:", data.AdminAddr)
-	log.Println("onchain content:")
+	log.Println("jetton content:")
 	log.Println("	name:", content.Name)
-	log.Println("	symbol:", content.GetAttribute("symbol"))
-	if content.GetAttribute("decimals") != "" {
-		decimals, err = strconv.Atoi(content.GetAttribute("decimals"))
-		if err != nil {
-			log.Fatal("invalid decimals")
-		}
-	}
-	log.Println("	decimals:", decimals)
-	log.Println("	description:", content.Description)
+	log.Println("	Description:", content.Description)
+	log.Println("	Symbol:", content.Symbol)
+	log.Println("	Decimals:", content.Decimals)
+	log.Println("	Image:", content.Image)
+	log.Println("	URI:", content.URI) // 链下
+	log.Println("	AmountType:", content.AmountType)
+	log.Println("	RenderType:", content.RenderType)
+
 	return nil, data
 }
 
