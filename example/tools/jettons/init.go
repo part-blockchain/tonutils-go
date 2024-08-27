@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"flag"
+	"fmt"
 	"github.com/xssnick/tonutils-go/liteclient"
 	"github.com/xssnick/tonutils-go/ton"
+	"github.com/xssnick/tonutils-go/ton/jetton"
 	"log"
 	"sync"
 )
@@ -55,6 +59,25 @@ func GetTonAPIIns() ton.APIClientWrapped {
 		TonAPI = initTonApiIns()
 	})
 	return TonAPI
+}
+
+func GetJettonMetaData() (error, *jetton.MetaData) {
+	// 生成jetton minter合约的content
+	content := jetton.MetaData{}
+	if err := json.Unmarshal([]byte(JettonContentCfg), &content); nil != err {
+		errMsg := fmt.Sprintf("unmarshal jetton content config failed:%v", err)
+		fmt.Println(errMsg)
+		return errors.New(errMsg), nil
+	}
+	return nil, &content
+}
+
+func GetScanCfg() string {
+	if *IsMainNet {
+		return MainNetScan
+	} else {
+		return TestNetScan
+	}
 }
 
 func GetRpcUrl() string {

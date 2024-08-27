@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/xssnick/tonutils-go/address"
@@ -15,6 +14,7 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -84,14 +84,17 @@ func getDeployJettonMinterData(totalSupply *big.Int, owner *address.Address,
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert jetton minter content to cell: %w", err)
 	}
+	// 校验content hash
 	fmt.Printf("jetton content cell hash: %s\n", hex.EncodeToString(conData.Hash()))
 	data := cell.BeginCell().
-		MustStoreUInt(totalSupply.Uint64(), 64).
+		MustStoreCoins(totalSupply.Uint64()).
 		MustStoreAddr(owner).
 		MustStoreRef(conData).
 		MustStoreRef(jettonWalletCode).
 		EndCell()
 
+	// 校验data hash
+	fmt.Println("deploy jetton minter initialize data hash:", hex.EncodeToString(data.Hash()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert depoly jetton minter data to cell: %w", err)
 	}
@@ -114,28 +117,25 @@ func DeployJettonMinter(jettonMinterCodeFile, jettonWalletCodeFile string) error
 	}
 
 	log.Println("Deploy wallet:", w.WalletAddress().String())
-	msgBody := cell.BeginCell().EndCell()
-
 	fmt.Println("Deploying jetton minter contract to ton blockchain...")
-	// 生成jetton minter合约的content
-	content := jetton.MetaData{}
-	if err = json.Unmarshal([]byte(JettonContentCfg), &content); nil != err {
-		errMsg := fmt.Sprintf("unmarshal jetton content config failed:%v", err)
-		fmt.Println(errMsg)
-		return errors.New(errMsg)
+	// 获取jetton minter合约的content
+	err, content := GetJettonMetaData()
+	if nil != err {
+		return err
 	}
 	// 生成部署合约数据（初始化合约数据）
-	deployData, err := getDeployJettonMinterData(big.NewInt(0), w.WalletAddress(), &content, getJettonWalletCode(jettonWalletCodeFile))
+	deployData, err := getDeployJettonMinterData(big.NewInt(0), w.WalletAddress(), content, getJettonWalletCode(jettonWalletCodeFile))
 	if nil != err {
 		return errors.New("get Deploy Jetton Minter Data failed")
 	}
+	msgBody := cell.BeginCell().EndCell()
 	addr, _, _, err := w.DeployContractWaitTransaction(context.Background(), tlb.MustFromTON("0.05"),
 		msgBody, getJettonMinterCode(jettonMinterCodeFile), deployData)
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Printf("Deployed contract: https://testnet.tonviewer.com/%s\n", addr.String())
+	fmt.Printf(GetScanCfg(), addr.String())
 	return nil
 }
 
@@ -200,10 +200,51 @@ func GetJettonWallet(jettonMinterAddr, ownerAddr string) error {
 	if err != nil {
 		log.Fatal(err)
 	}
-	decimals := 6
+
+	// 获取jetton minter合约的content
+	err, metadata := GetJettonMetaData()
+	if nil != err {
+		return err
+	}
+	decimals, err := strconv.Atoi(metadata.Decimals)
+	if nil != err {
+		decimals = 6
+	}
 	log.Println("jetton minter address:", jettonWalletData.JettonMinterAddr)
 	log.Println("jetton wallet owner address:", jettonWalletData.OwnerAddr)
 	log.Println("jetton balance:", tlb.MustFromNano(jettonWalletData.Balance, decimals))
 
+	return nil
+}
+
+// MintToken 铸造Token
+func MintToken(jettonMinterAddr, receiveAddr, amount string) error {
+	if nil == TonAPI {
+		TonAPI = GetTonAPIIns()
+		if nil == TonAPI {
+			return errors.New("get ton api instance failed")
+		}
+	}
+	log.Println("start to mint jetton token...")
+	err, w := GenWalletByMnemonicWords(TonAPI, Seeds, WalletVersion)
+	if err != nil || nil == w {
+		errMsg := fmt.Sprintf("generate wallet by seed words failed: %s", err.Error())
+		log.Println(errMsg)
+		return errors.New(errMsg)
+	}
+	// 获取jetton minter client对象
+	err, pCtx, master := NewJettonMasterClient(jettonMinterAddr)
+	if err != nil || nil == master || nil == pCtx {
+		return errors.New("new jetton master client failed")
+	}
+	if "" == receiveAddr {
+		// 默认接收地址为当前钱包地址，jetton minter合约的owner地址
+		receiveAddr = w.WalletAddress().String()
+	}
+	// 铸币
+	if err, _ = master.MintToken(pCtx, w, receiveAddr, amount, nil); err != nil {
+		log.Fatal(err)
+	}
+	log.Printf(GetScanCfg(), w.WalletAddress().String())
 	return nil
 }
