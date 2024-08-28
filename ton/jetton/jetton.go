@@ -201,8 +201,8 @@ func (c *Client) BuildMintTokenPayload(receiveAddr, gasFee, forwardGasFee, jetto
 }
 
 // MintToken 铸币
-func (c *Client) MintToken(ctx *context.Context, w *wallet.Wallet, receiveAddr, amount string, payloadMsg *cell.Cell) (error, string) {
-	mintData, err := c.BuildMintTokenPayload(receiveAddr, "0.1", "0.05", amount, 6, payloadMsg)
+func (c *Client) MintToken(ctx *context.Context, w *wallet.Wallet, receiveAddr, amount string, jettonDecimals int, payloadMsg *cell.Cell) (error, string) {
+	mintData, err := c.BuildMintTokenPayload(receiveAddr, "0.1", "0.05", amount, jettonDecimals, payloadMsg)
 	if err != nil {
 		log.Fatalln("build mint token payload failed:", err.Error())
 		return err, ""

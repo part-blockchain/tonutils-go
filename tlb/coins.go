@@ -23,6 +23,10 @@ func (g Coins) TON() string {
 	return g.String()
 }
 
+func (g Coins) Val() *big.Int {
+	return g.val
+}
+
 func (g Coins) String() string {
 	if g.val == nil {
 		return "0"
@@ -69,9 +73,24 @@ func (g Coins) Nano() *big.Int {
 	return new(big.Int).Set(g.val)
 }
 
+// Add Coins的val相加
+func (g Coins) Add(s Coins) (error, Coins) {
+	newCoins := Coins{}
+	if g.decimals != s.decimals {
+		return errors.New("decimals are not the same for both objects"), newCoins
+	}
+	newCoins.decimals = g.decimals
+	newCoins.val = new(big.Int).Add(g.val, s.val)
+	return nil, newCoins
+}
+
 // Cmp 比较数值大小
 func (g Coins) Cmp(s Coins) int {
 	return g.val.Cmp(s.val)
+}
+
+func (g Coins) CmpVal(val *big.Int) int {
+	return g.val.Cmp(val)
 }
 
 func MustFromDecimal(val string, decimals int) Coins {

@@ -15,7 +15,8 @@ import (
 
 // 操作类型
 var opType = flag.Int("op_type", 0, "jetton operation type:"+
-	"[0: deploy jetton minter, 1: get jetton data, 2: get jetton wallet data, 3: Mint Token]")
+	"[0: deploy jetton minter, 1: get jetton data, 2: get jetton wallet data, 3: Mint Token,"+
+	"4: Transfer Token, 5: Get Token Balance, 6: Get Token Info]")
 
 // deploy jetton minter
 var jettonMinterCodeFile = flag.String("jetton_minter_code_file", "", "Jetton minter code file path")
@@ -28,8 +29,15 @@ var jettonWalletOwner = flag.String("owner_addr", "0QB8_1jtzFEA3LIUznSTQtHkp0HhJ
 
 // Mint Token
 // 铸币时，token的接收地址，为空时默认为owner地址
-var receiveAddr = flag.String("receive_addr", "", "Mint Jetton token receive address")
-var amount = flag.String("amount", "10000000000", "Mint Jetton token amount")
+var mintReceiveAddr = flag.String("mint_receive_addr", "", "Mint Jetton token receive address")
+
+// Transfer Token
+// 转账时，token的接收地址
+var transferReceiveAddr = flag.String("transfer_receive_addr", "0QB8_1jtzFEA3LIUznSTQtHkp0HhJegU94l5fMEpT5qAJEXX", "tranfer Jetton token receive address")
+var comment = flag.String("comment", "", "Transfer Jetton token comment")
+
+// Mint or Transfer Jetton token amount
+var amount = flag.String("amount", "0.000001", "Mint or Transfer Jetton token amount")
 
 func init() {
 	flag.Parse()
@@ -43,6 +51,8 @@ func main() {
 	} else if *opType == 2 {
 		GetJettonWallet(*jettonMinterAddr, *jettonWalletOwner)
 	} else if *opType == 3 {
-		MintToken(*jettonMinterAddr, *receiveAddr, *amount)
+		MintToken(*jettonMinterAddr, *mintReceiveAddr, *amount)
+	} else if *opType == 4 {
+		TransferToken(*jettonMinterAddr, *transferReceiveAddr, *amount, *comment)
 	}
 }
