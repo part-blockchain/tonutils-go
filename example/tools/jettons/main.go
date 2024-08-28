@@ -23,7 +23,7 @@ var jettonWalletCodeFile = flag.String("jetton_wallet_code_file", "", "Jetton wa
 
 // jetton minnter地址
 // var jettonMinterAddr = flag.String("jetton_minter_addr", "EQBg-WGLMoQoA52la9C-i5wnQyNelVdZiE3j6ithX7bfz0MV", "Jetton Minter address")
-var jettonMinterAddr = flag.String("jetton_minter_addr", "kQAUjr-hCvucniRxQPT6vOh-LjAKW37VVoY11J2sREpCzMRa", "Jetton Minter address")
+var jettonMinterAddr = flag.String("jetton_minter_addr", "", "Jetton Minter address")
 var jettonWalletOwner = flag.String("owner_addr", "0QB8_1jtzFEA3LIUznSTQtHkp0HhJegU94l5fMEpT5qAJEXX", "Jetton wallet owner address")
 
 // Mint Token

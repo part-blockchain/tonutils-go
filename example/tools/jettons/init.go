@@ -3,15 +3,31 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"github.com/xssnick/tonutils-go/liteclient"
 	"github.com/xssnick/tonutils-go/ton"
 	"github.com/xssnick/tonutils-go/ton/jetton"
+	"io/ioutil"
 	"log"
+	"os"
 	"sync"
 )
+
+type RpcCfg struct {
+	TestNetUrl string `json:"test_net"`
+	MainNetUrl string `json:"main_net"`
+}
+
+type JettonConfig struct {
+	MetaData         jetton.MetaData `json:"metadata"`
+	JettonMinterAddr string          `json:"jetton_minter_addr"`
+}
+
+type GlobalConfig struct {
+	Rpc    RpcCfg       `json:"rpc"`
+	Jetton JettonConfig `json:"jetton"`
+}
 
 // api client instance
 var (
@@ -21,6 +37,7 @@ var (
 
 // IsMainNet main net flag
 var IsMainNet = flag.Bool("mainnet", false, "use main net")
+var configPath = flag.String("config", "", "config file path")
 
 // 初始化api client单例对象
 func initTonApiIns() ton.APIClientWrapped {
@@ -63,13 +80,11 @@ func GetTonAPIIns() ton.APIClientWrapped {
 
 func GetJettonMetaData() (error, *jetton.MetaData) {
 	// 生成jetton minter合约的content
-	content := jetton.MetaData{}
-	if err := json.Unmarshal([]byte(JettonContentCfg), &content); nil != err {
-		errMsg := fmt.Sprintf("unmarshal jetton content config failed:%v", err)
-		fmt.Println(errMsg)
-		return errors.New(errMsg), nil
+	cfg, err := GetGlobalCfg()
+	if nil != err {
+		return err, nil
 	}
-	return nil, &content
+	return nil, &cfg.Jetton.MetaData
 }
 
 func GetScanCfg() string {
@@ -78,6 +93,48 @@ func GetScanCfg() string {
 	} else {
 		return TestNetScan
 	}
+}
+
+func GetGlobalCfg() (*GlobalConfig, error) {
+	cfg := &GlobalConfig{}
+	if *configPath == "" {
+		dir, _ := os.Getwd()
+		*configPath = fmt.Sprintf("%s/example/tools/jettons/config.json", dir)
+	}
+	fmt.Printf("global config file path: %s\n", *configPath)
+	data, err := ioutil.ReadFile(*configPath)
+	if err != nil {
+		fmt.Println("read global config file failed:", err)
+		return nil, err
+	}
+	if err = json.Unmarshal(data, cfg); nil != err {
+		fmt.Println("unmarshal global config failed:", err)
+		return nil, err
+	}
+
+	return cfg, nil
+}
+
+// UpdateGlobalCfg 更新全局配置，将配置写入config.json文件
+func UpdateGlobalCfg(cfg *GlobalConfig) error {
+	if *configPath == "" || cfg == nil {
+		errMsg := "config path or config data is empty"
+		fmt.Println(errMsg)
+		return fmt.Errorf(errMsg)
+	}
+	updatedJSON, err := json.MarshalIndent(*cfg, "", "    ")
+	if err != nil {
+		fmt.Println("marshal global config failed:", err)
+		return err
+	}
+	// 写回文件
+	if err := ioutil.WriteFile(*configPath, updatedJSON, 0644); err != nil {
+		fmt.Println("Error writing jetton config to file:", err)
+		return err
+	}
+
+	fmt.Println("JSON file updated successfully.")
+	return nil
 }
 
 func GetRpcUrl() string {

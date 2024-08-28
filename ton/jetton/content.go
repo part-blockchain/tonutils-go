@@ -29,8 +29,8 @@ type ContentOnchain struct {
 }
 
 type MetaData struct {
-	ContentOffchain
-	ContentOnchain
+	ContentOffchain `json:"offchain"`
+	ContentOnchain  `json:"onchain"`
 }
 
 func GetContentFromCell(c *cell.Cell) (ContentAny, error) {

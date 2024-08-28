@@ -18,8 +18,8 @@ import (
 	"strings"
 )
 
-// GenWalletByMnemonicWords Generate Wallet based on mnemonic words
-func GenWalletByMnemonicWords(api wallet.TonAPI, seeds string, version wallet.Version) (error, *wallet.Wallet) {
+// genWalletByMnemonicWords Generate Wallet based on mnemonic words
+func genWalletByMnemonicWords(api wallet.TonAPI, seeds string, version wallet.Version) (error, *wallet.Wallet) {
 	log.Println("generate address by mnemonic words...")
 	// seed words of account, you can generate them with any wallet or using wallet.NewSeed() method
 	words := strings.Split(seeds, " ")
@@ -87,7 +87,7 @@ func getDeployJettonMinterData(totalSupply *big.Int, owner *address.Address,
 	// 校验content hash
 	fmt.Printf("jetton content cell hash: %s\n", hex.EncodeToString(conData.Hash()))
 	data := cell.BeginCell().
-		MustStoreCoins(totalSupply.Uint64()).
+		MustStoreCoins(totalSupply.Uint64()). // total supply, 提示：不要用MustStoreUInt(totalSupply.Uint64(), 64)
 		MustStoreAddr(owner).
 		MustStoreRef(conData).
 		MustStoreRef(jettonWalletCode).
@@ -102,45 +102,8 @@ func getDeployJettonMinterData(totalSupply *big.Int, owner *address.Address,
 	return data, nil
 }
 
-// DeployJettonMinter 部署Jetton Minter合约
-func DeployJettonMinter(jettonMinterCodeFile, jettonWalletCodeFile string) error {
-	if nil == TonAPI {
-		TonAPI = GetTonAPIIns()
-		if nil == TonAPI {
-			return errors.New("get ton api instance failed")
-		}
-	}
-	log.Println("Deploying jetton contract to ton blockchain...")
-	err, w := GenWalletByMnemonicWords(TonAPI, Seeds, WalletVersion)
-	if err != nil || nil == w {
-		return errors.New("generate wallet by seed words failed")
-	}
-
-	log.Println("Deploy wallet:", w.WalletAddress().String())
-	fmt.Println("Deploying jetton minter contract to ton blockchain...")
-	// 获取jetton minter合约的content
-	err, content := GetJettonMetaData()
-	if nil != err {
-		return err
-	}
-	// 生成部署合约数据（初始化合约数据）
-	deployData, err := getDeployJettonMinterData(big.NewInt(0), w.WalletAddress(), content, getJettonWalletCode(jettonWalletCodeFile))
-	if nil != err {
-		return errors.New("get Deploy Jetton Minter Data failed")
-	}
-	msgBody := cell.BeginCell().EndCell()
-	addr, _, _, err := w.DeployContractWaitTransaction(context.Background(), tlb.MustFromTON("0.05"),
-		msgBody, getJettonMinterCode(jettonMinterCodeFile), deployData)
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Printf(GetScanCfg(), addr.String())
-	return nil
-}
-
-// NewJettonMasterClient 创建Jetton Master Client
-func NewJettonMasterClient(jettonMinterAddr string) (error, *context.Context, *jetton.Client) {
+// newJettonMasterClient 创建Jetton Master Client
+func newJettonMasterClient(jettonMinterAddr string) (error, *context.Context, *jetton.Client) {
 	if nil == TonAPI {
 		TonAPI = GetTonAPIIns()
 		if nil == TonAPI {
@@ -155,9 +118,59 @@ func NewJettonMasterClient(jettonMinterAddr string) (error, *context.Context, *j
 	return nil, &ctx, master
 }
 
+// DeployJettonMinter 部署Jetton Minter合约
+func DeployJettonMinter(jettonMinterCodeFile, jettonWalletCodeFile string) error {
+	if nil == TonAPI {
+		TonAPI = GetTonAPIIns()
+		if nil == TonAPI {
+			return errors.New("get ton api instance failed")
+		}
+	}
+	log.Println("Deploying jetton contract to ton blockchain...")
+	err, w := genWalletByMnemonicWords(TonAPI, Seeds, WalletVersion)
+	if err != nil || nil == w {
+		return errors.New("generate wallet by seed words failed")
+	}
+
+	log.Println("Deploy wallet:", w.WalletAddress().String())
+	fmt.Println("Deploying jetton minter contract to ton blockchain...")
+	// 获取jetton全局配置
+	cfg, err := GetGlobalCfg()
+	if nil != err {
+		return err
+	}
+	// 生成部署合约数据（初始化合约数据）
+	deployData, err := getDeployJettonMinterData(big.NewInt(0), w.WalletAddress(), &cfg.Jetton.MetaData, getJettonWalletCode(jettonWalletCodeFile))
+	if nil != err {
+		return errors.New("get Deploy Jetton Minter Data failed")
+	}
+	msgBody := cell.BeginCell().EndCell()
+	addr, _, _, err := w.DeployContractWaitTransaction(context.Background(), tlb.MustFromTON("0.05"),
+		msgBody, getJettonMinterCode(jettonMinterCodeFile), deployData)
+	if err != nil {
+		panic(err)
+	}
+	// 浏览器展示部署合约的地址
+	fmt.Printf(GetScanCfg(), addr.String())
+	// 更新jetton minter地址
+	cfg.Jetton.JettonMinterAddr = addr.String()
+	if err = UpdateGlobalCfg(cfg); nil != err {
+		return err
+	}
+	return nil
+}
+
 // GetJettonData 获取Jetton Token信息
 func GetJettonData(jettonMinterAddr string) (error, *jetton.Data) {
-	err, ctx, master := NewJettonMasterClient(jettonMinterAddr)
+	if "" == jettonMinterAddr {
+		// read from config file
+		cfg, err := GetGlobalCfg()
+		if nil != err {
+			return err, nil
+		}
+		jettonMinterAddr = cfg.Jetton.JettonMinterAddr
+	}
+	err, ctx, master := newJettonMasterClient(jettonMinterAddr)
 	if err != nil || nil == master || nil == ctx {
 		return errors.New("new jetton master client failed"), nil
 	}
@@ -186,7 +199,15 @@ func GetJettonData(jettonMinterAddr string) (error, *jetton.Data) {
 
 // GetJettonWallet 获取Jetton Wallet Data信息
 func GetJettonWallet(jettonMinterAddr, ownerAddr string) error {
-	err, pCtx, master := NewJettonMasterClient(jettonMinterAddr)
+	if "" == jettonMinterAddr {
+		// read from config file
+		cfg, err := GetGlobalCfg()
+		if nil != err {
+			return err
+		}
+		jettonMinterAddr = cfg.Jetton.JettonMinterAddr
+	}
+	err, pCtx, master := newJettonMasterClient(jettonMinterAddr)
 	if err != nil || nil == master || nil == pCtx {
 		return errors.New("new jetton master client failed")
 	}
@@ -219,6 +240,14 @@ func GetJettonWallet(jettonMinterAddr, ownerAddr string) error {
 
 // MintToken 铸造Token
 func MintToken(jettonMinterAddr, receiveAddr, amount string) error {
+	if "" == jettonMinterAddr {
+		// read from config file
+		cfg, err := GetGlobalCfg()
+		if nil != err {
+			return err
+		}
+		jettonMinterAddr = cfg.Jetton.JettonMinterAddr
+	}
 	if nil == TonAPI {
 		TonAPI = GetTonAPIIns()
 		if nil == TonAPI {
@@ -226,14 +255,14 @@ func MintToken(jettonMinterAddr, receiveAddr, amount string) error {
 		}
 	}
 	log.Println("start to mint jetton token...")
-	err, w := GenWalletByMnemonicWords(TonAPI, Seeds, WalletVersion)
+	err, w := genWalletByMnemonicWords(TonAPI, Seeds, WalletVersion)
 	if err != nil || nil == w {
 		errMsg := fmt.Sprintf("generate wallet by seed words failed: %s", err.Error())
 		log.Println(errMsg)
 		return errors.New(errMsg)
 	}
 	// 获取jetton minter client对象
-	err, pCtx, master := NewJettonMasterClient(jettonMinterAddr)
+	err, pCtx, master := newJettonMasterClient(jettonMinterAddr)
 	if err != nil || nil == master || nil == pCtx {
 		return errors.New("new jetton master client failed")
 	}

@@ -23,8 +23,8 @@ const (
 	TestNetCfg  = "https://ton.org/testnet-global.config.json"
 	MainNetUrl  = "https://toncenter.com/api/v2"
 	TestNetUrl  = "https://testnet.toncenter.com/api/v2"
-	MainNetScan = "You can view it at: https://tonviewer.com/%s"
-	TestNetScan = "You can view it at: https://testnet.tonviewer.com/%s"
+	MainNetScan = "You can view it at: https://tonviewer.com/%s\n"
+	TestNetScan = "You can view it at: https://testnet.tonviewer.com/%s\n"
 	// MainNetApiKey / TestNetApiKey ApiKey从·https://t.me/tonapibot·获取
 	MainNetApiKey = "f34ef3ba5fd9a2205809cfef6b629026c9a824c394203877a2c309776f2539b3"
 	TestNetApiKey = "39b381ff24d91834ee8976a0d6ecec4bf6a74908925ecb4ee2c227ca20b06b5e"
