@@ -2,6 +2,7 @@
 Crash Game合约操作：
 1.部署Crash Game合约
 2.获取Crash Game合约信息
+3.创建新的一轮游戏
 */
 package main
 
@@ -12,7 +13,7 @@ import (
 
 // CrashGameOpType CrashGame操作类型
 var gameOpType = flag.Int("game_op_type", -1, "crash game operation type:"+
-	"[0: deploy crash game, 1: get crash game info]")
+	"[0: deploy crash game, 1: get crash game info, 2: new round for crash game]")
 
 // deploy crash game
 var crashGameCodeFile = flag.String("crash_game_code_file", "", "crash game code file path")
@@ -32,6 +33,8 @@ func CrashGameOperation() {
 			DeployCrashGame(*jettonMinterAddr, *jettonWalletCodeFile, *gameWalletCodeFile, *gameRecordCodeFile, *crashGameCodeFile)
 		case 1:
 			GetCrashGameData(*crashGameAddr, *showCode)
+		case 2:
+			NewRound(*crashGameAddr)
 		default:
 			// do nothing
 			fmt.Println("Invalid crash game operation type")

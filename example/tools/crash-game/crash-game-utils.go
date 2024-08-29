@@ -13,7 +13,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"strconv"
 )
 
 //// CrashGameData crash game合约数据
@@ -228,7 +227,7 @@ func DeployCrashGame(jettonMinterAddr, jettonWalletCodeFile, gameWalletCodeFile,
 		panic(err)
 	}
 	// 浏览器展示部署合约的地址
-	fmt.Printf(GetScanCfg(), addr.String())
+	fmt.Printf(GetScanCfg()+"%s\n", addr.String())
 	// 更新crash game地址
 	cfg.CrashGameCfg.ContractAddr = addr.String()
 	if err = UpdateGlobalCfg(cfg); nil != err {
@@ -263,14 +262,14 @@ func GetCrashGameData(crashGameAddr string, showCode bool) (error, *CrashGame.Da
 }
 
 // NewRound 创建新的一轮游戏
-func NewRound(jettonMinterAddr, receiveAddr, amount string) error {
+func NewRound(crashGameAddr string) error {
 	// read from config file
 	cfg, err := GetGlobalCfg()
 	if nil != err {
 		return err
 	}
-	if "" == jettonMinterAddr {
-		jettonMinterAddr = cfg.Jetton.JettonMinterAddr
+	if "" == crashGameAddr {
+		crashGameAddr = cfg.CrashGameCfg.ContractAddr
 	}
 	if nil == TonAPI {
 		TonAPI = GetTonAPIIns()
@@ -278,7 +277,7 @@ func NewRound(jettonMinterAddr, receiveAddr, amount string) error {
 			return errors.New("get ton api instance failed")
 		}
 	}
-	log.Println("start to mint jetton token...")
+
 	err, w := genWalletByMnemonicWords(TonAPI, Seeds, WalletVersion)
 	if err != nil || nil == w {
 		errMsg := fmt.Sprintf("generate wallet by seed words failed: %s", err.Error())
@@ -286,19 +285,16 @@ func NewRound(jettonMinterAddr, receiveAddr, amount string) error {
 		return errors.New(errMsg)
 	}
 	// 获取jetton minter client对象
-	err, pCtx, master := newJettonMasterClient(jettonMinterAddr)
-	if err != nil || nil == master || nil == pCtx {
-		return errors.New("new jetton master client failed")
+	err, pCtx, crashGame := newCrashGameClient(crashGameAddr)
+	if err != nil || nil == crashGame || nil == pCtx {
+		return errors.New("new crash game client failed")
 	}
-	if "" == receiveAddr {
-		// 默认接收地址为当前钱包地址，jetton minter合约的owner地址
-		receiveAddr = w.WalletAddress().String()
-	}
-	// 铸币
-	jettonDecimals, _ := strconv.Atoi(cfg.Jetton.MetaData.Decimals)
-	if err, _ = master.MintToken(pCtx, w, receiveAddr, amount, jettonDecimals, nil); err != nil {
+
+	log.Println("start to new round for crash game...")
+	txHash := ""
+	if err, txHash = crashGame.NewRound(pCtx, w); err != nil {
 		log.Fatal(err)
 	}
-	log.Printf(GetScanCfg(), receiveAddr)
+	log.Printf(GetScanCfg()+"transaction/%s\n", txHash)
 	return nil
 }

@@ -19,34 +19,6 @@ type TonApi interface {
 	SubscribeOnTransactions(workerCtx context.Context, addr *address.Address, lastProcessedLT uint64, channel chan<- *tlb.Transaction)
 }
 
-var ErrInvalidTransfer = errors.New("transfer is not verified")
-
-type MintPayloadMasterMsg struct {
-	Opcode        uint32           `tlb:"## 32"`
-	QueryID       uint64           `tlb:"## 64"`
-	JettonAmount  tlb.Coins        `tlb:"."`
-	FromAddr      *address.Address `tlb:"addr"`
-	ResponseAddr  *address.Address `tlb:"addr"`
-	ForwardGasFee tlb.Coins        `tlb:"."`
-	RestData      *cell.Cell       `tlb:"."`
-}
-
-type MintPayload struct {
-	_         tlb.Magic            `tlb:"#00000015"` // opcode: 21
-	QueryID   uint64               `tlb:"## 64"`
-	ToAddress *address.Address     `tlb:"addr"`
-	Amount    tlb.Coins            `tlb:"."`
-	MasterMsg MintPayloadMasterMsg `tlb:"^"`
-}
-
-type TransferNotification struct {
-	_              tlb.Magic        `tlb:"#7362d09c"`
-	QueryID        uint64           `tlb:"## 64"`
-	Amount         tlb.Coins        `tlb:"."`
-	Sender         *address.Address `tlb:"addr"`
-	ForwardPayload *cell.Cell       `tlb:"either . ^"`
-}
-
 // Data crash game合约存储数据
 type Data struct {
 	RoundNum         uint64           //  游戏轮数

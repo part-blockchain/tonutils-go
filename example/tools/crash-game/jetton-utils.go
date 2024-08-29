@@ -152,7 +152,7 @@ func DeployJettonMinter(jettonMinterCodeFile, jettonWalletCodeFile string) error
 		panic(err)
 	}
 	// 浏览器展示部署合约的地址
-	fmt.Printf(GetScanCfg(), addr.String())
+	fmt.Printf(GetScanCfg()+"%s\n", addr.String())
 	// 更新jetton minter地址
 	cfg.Jetton.JettonMinterAddr = addr.String()
 	if err = UpdateGlobalCfg(cfg); nil != err {
@@ -277,7 +277,7 @@ func MintToken(jettonMinterAddr, receiveAddr, amount string) error {
 	if err, _ = master.MintToken(pCtx, w, receiveAddr, amount, jettonDecimals, nil); err != nil {
 		log.Fatal(err)
 	}
-	log.Printf(GetScanCfg(), receiveAddr)
+	log.Printf(GetScanCfg()+"%s\n", receiveAddr)
 	return nil
 }
 
@@ -379,6 +379,6 @@ func TransferToken(jettonMinterAddr, receiveAddr, amount, comment string) error 
 		panic(err)
 	}
 	log.Println("transaction confirmed, hash:", base64.StdEncoding.EncodeToString(tx.Hash))
-	log.Printf(GetScanCfg(), receiveAddr)
+	log.Printf(GetScanCfg()+"%s\n", receiveAddr)
 	return nil
 }
