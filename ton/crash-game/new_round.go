@@ -1,3 +1,4 @@
+// Package crash_game 创建新的一轮游戏
 package crash_game
 
 import (
@@ -12,7 +13,7 @@ import (
 )
 
 type NewRoundPayload struct {
-	_       tlb.Magic `tlb:"#6cd87433"` // opcode
+	_       tlb.Magic `tlb:"#6cd87433"` // new round opcode
 	QueryID uint64    `tlb:"## 64"`
 }
 

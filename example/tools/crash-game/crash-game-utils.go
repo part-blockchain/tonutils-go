@@ -9,29 +9,32 @@ import (
 	"github.com/xssnick/tonutils-go/address"
 	"github.com/xssnick/tonutils-go/tlb"
 	CrashGame "github.com/xssnick/tonutils-go/ton/crash-game"
+	"github.com/xssnick/tonutils-go/ton/wallet"
 	"github.com/xssnick/tonutils-go/tvm/cell"
 	"io/ioutil"
 	"log"
 	"os"
+	"time"
 )
 
-//// CrashGameData crash game合约数据
-//type CrashGameData struct {
-//	RoundNum         uint64           //  游戏轮数
-//	GameState        uint64           //  游戏状态: 0-bet; 1-游戏结束/未启动
-//	Seed             uint64           //  随机数种子
-//	CrashMultiple    uint64           // Crash乘数, 即爆炸倍数, 单位:%
-//	PlayerNums       uint64           // 玩家数量
-//	StartUnixTime    uint64           // 游戏开始时间(unix)
-//	StartTxTime      uint64           // 游戏开始交易时间(unix)
-//	StartBlkTime     uint64           // 游戏开始区块时间(unix)
-//	MinIntervalTime  uint64           //  一轮游戏从创建完成到crash的最小时间间隔,单位秒
-//	AdminAddr        *address.Address //  管理员地址
-//	JettonMinterAddr *address.Address //  JettonMinter合约地址
-//	JettonWalletCode *cell.Cell       //  JettonWallet合约代码
-//	GameWalletCode   *cell.Cell       //  GameWallet合约代码
-//	GameRecordCode   *cell.Cell       //  GameRecord合约代码
-//}
+const (
+	OpBet = 0x9b0663d8
+)
+
+// 获取玩家的钱包
+func getPlayerWallet(api wallet.TonAPI, walletIndex int, version wallet.Version) *wallet.Wallet {
+	// 获取玩家钱包
+	if walletIndex >= len(PlayerSeeds) {
+		log.Fatal("player wallet index out of range")
+		return nil
+	}
+	err, w := genWalletByMnemonicWords(api, PlayerSeeds[walletIndex], version)
+	if err != nil || nil == w {
+		log.Fatal("generate wallet by seed words failed:", err.Error())
+	}
+	log.Printf("use player wallet[%d]: %s\n", walletIndex, w.WalletAddress().String())
+	return w
+}
 
 // 获取合约代码的code
 func getContractCode(contractCodeFilePath, fileName string) *cell.Cell {
@@ -289,12 +292,86 @@ func NewRound(crashGameAddr string) error {
 	if err != nil || nil == crashGame || nil == pCtx {
 		return errors.New("new crash game client failed")
 	}
-
+	// 获取旧的round number
+	beforeRoundNum, err := crashGame.GetRoundNum(*pCtx)
+	if err != nil {
+		return err
+	}
 	log.Println("start to new round for crash game...")
 	txHash := ""
 	if err, txHash = crashGame.NewRound(pCtx, w); err != nil {
 		log.Fatal(err)
 	}
+	afterRoundNum, err := crashGame.GetRoundNum(*pCtx)
+	if err != nil {
+		return err
+	}
+	for {
+		if afterRoundNum > beforeRoundNum {
+			break
+		}
+		// 休眠2秒
+		time.Sleep(2 * time.Second)
+		afterRoundNum, _ = crashGame.GetRoundNum(*pCtx)
+	}
 	log.Printf(GetScanCfg()+"transaction/%s\n", txHash)
+	// 更新round number
+	cfg.CrashGameCfg.RoundNum = afterRoundNum
+	if err = UpdateGlobalCfg(cfg); nil != err {
+		return err
+	}
+	return nil
+}
+
+// Bet 玩家下注
+func Bet(playerWalletIndex int, crashGameAddr, betAmount string, betMultiple uint64) error {
+	if nil == TonAPI {
+		TonAPI = GetTonAPIIns()
+		if nil == TonAPI {
+			return errors.New("get ton api instance failed")
+		}
+	}
+	// 获取玩家钱包
+	w := getPlayerWallet(TonAPI, playerWalletIndex, WalletVersion)
+	if nil == w {
+		return errors.New("generate wallet by seed words failed")
+	}
+	// read from config file
+	cfg, err := GetGlobalCfg()
+	if nil != err {
+		return err
+	}
+	if "" == crashGameAddr {
+		crashGameAddr = cfg.CrashGameCfg.ContractAddr
+	}
+	if betAmount == "" {
+		betAmount = cfg.CrashGameCfg.Bet.Amount
+	}
+	if betMultiple == 0 {
+		betMultiple = cfg.CrashGameCfg.Bet.Multiple
+	}
+
+	// 转账jetton token到crash game合约地址
+	// 从crash game合约中获取jetton minter地址
+	err, data := GetCrashGameData(crashGameAddr, false)
+	if err != nil || nil == data {
+		return errors.New("get crash game data failed")
+	}
+	// 下注的payload:组装转账的payload转发消息, 在crash-game合约的transfer_notification中处理下注信息
+	betPayload := cell.BeginCell().
+		MustStoreUInt(OpBet, 32).
+		MustStoreUInt(data.RoundNum, 32).
+		MustStoreUInt(betMultiple, 32).
+		EndCell()
+	// 计算gas fee
+	betGasFee := 0.05
+	notifyGasFee := 0.05
+	forwardGasFee := fmt.Sprintf("%f", betGasFee+notifyGasFee)
+	if err = TransferToken(w, data.JettonMinterAddr.String(), crashGameAddr, w.WalletAddress().String(), betAmount, "", forwardGasFee, betPayload); nil != err {
+		errMsg := fmt.Sprintf("bet failed, transfer token failed: %s", err.Error())
+		log.Println(errMsg)
+		return errors.New(errMsg)
+	}
+	// 获取crash game信息
 	return nil
 }

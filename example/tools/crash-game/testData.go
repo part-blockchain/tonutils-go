@@ -22,5 +22,10 @@ const (
 	Seeds         = "birth pattern then forest walnut then phrase walnut fan pumpkin pattern then cluster blossom verify then forest velvet pond fiction pattern collect then then"
 	PriKeyHex     = "073cda7fa5bb8328355e5af63a7f12d359038084db2f20af898b154ea967fb3a1f435378bbed438c427de5c61d3bdfb3f542522877cb2f092efe9723f41bca1f"
 	WalletVersion = wallet.V3R2 // 钱包版本
-	TonDecimals   = 9           // TON的精度
 )
+
+// PlayerSeeds 玩家钱包的种子列表
+var PlayerSeeds = []string{
+	"illegal slot soda divert cliff fantasy cousin injury party gap length era between tortoise network festival near enlist kiss safe gossip few imitate box",
+	"denial civil check glide innocent enforce lizard rather impact elder loyal whisper post trap wire lady model pond market range satisfy depth yard arch",
+}

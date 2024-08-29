@@ -3,6 +3,7 @@ Crash Game合约操作：
 1.部署Crash Game合约
 2.获取Crash Game合约信息
 3.创建新的一轮游戏
+4.玩家下注
 */
 package main
 
@@ -13,7 +14,7 @@ import (
 
 // CrashGameOpType CrashGame操作类型
 var gameOpType = flag.Int("game_op_type", -1, "crash game operation type:"+
-	"[0: deploy crash game, 1: get crash game info, 2: new round for crash game]")
+	"[0: deploy crash game, 1: get crash game info, 2: new round for crash game, 3: bet for crash game]")
 
 // deploy crash game
 var crashGameCodeFile = flag.String("crash_game_code_file", "", "crash game code file path")
@@ -26,6 +27,11 @@ var crashGameAddr = flag.String("crash_game_addr", "", "crash game contract addr
 // 获取Crash Game合约信息
 var showCode = flag.Bool("show_code", false, "show contract code")
 
+// 玩家下注
+var playerWalletIndex = flag.Int("player_wallet_index", 0, "player wallet index")
+var betAmount = flag.String("bet_amount", "", "bet amount")
+var betMultiple = flag.Uint64("bet_multiple", 0, "bet multiple")
+
 func CrashGameOperation() {
 	if *gameOpType != -1 {
 		switch *gameOpType {
@@ -35,6 +41,8 @@ func CrashGameOperation() {
 			GetCrashGameData(*crashGameAddr, *showCode)
 		case 2:
 			NewRound(*crashGameAddr)
+		case 3:
+			Bet(*playerWalletIndex, *crashGameAddr, *betAmount, *betMultiple)
 		default:
 			// do nothing
 			fmt.Println("Invalid crash game operation type")

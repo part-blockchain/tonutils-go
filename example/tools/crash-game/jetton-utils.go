@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -274,14 +273,16 @@ func MintToken(jettonMinterAddr, receiveAddr, amount string) error {
 	}
 	// 铸币
 	jettonDecimals, _ := strconv.Atoi(cfg.Jetton.MetaData.Decimals)
-	if err, _ = master.MintToken(pCtx, w, receiveAddr, amount, jettonDecimals, nil); err != nil {
+	txHash := ""
+	if err, txHash = master.MintToken(pCtx, w, receiveAddr, amount, jettonDecimals, nil); err != nil {
 		log.Fatal(err)
 	}
-	log.Printf(GetScanCfg()+"%s\n", receiveAddr)
+	//log.Printf(GetScanCfg()+"%s\n", receiveAddr)
+	log.Printf(GetScanCfg()+"/transaction/%s\n", txHash)
 	return nil
 }
 
-func TransferToken(jettonMinterAddr, receiveAddr, amount, comment string) error {
+func TransferToken(transferWallet *wallet.Wallet, jettonMinterAddr, receiveAddr, responseAddr, amount, comment, forwardGasFee string, payloadForward *cell.Cell) error {
 	errMsg := ""
 	if "" == receiveAddr {
 		errMsg = fmt.Sprintf("receive address is empty")
@@ -313,32 +314,38 @@ func TransferToken(jettonMinterAddr, receiveAddr, amount, comment string) error 
 		}
 	}
 	log.Println("start to transfer jetton token...")
-	// 导入钱包
-	err, w := genWalletByMnemonicWords(TonAPI, Seeds, WalletVersion)
-	if err != nil || nil == w {
-		errMsg := fmt.Sprintf("generate wallet by seed words failed: %s", err.Error())
-		log.Println(errMsg)
-		return errors.New(errMsg)
+
+	if nil == transferWallet {
+		// 导入Admin钱包
+		err, transferWallet = genWalletByMnemonicWords(TonAPI, Seeds, WalletVersion)
+		if err != nil || nil == transferWallet {
+			errMsg := fmt.Sprintf("generate wallet by seed words failed: %s", err.Error())
+			log.Println(errMsg)
+			return errors.New(errMsg)
+		}
 	}
+
 	// 获取jetton minter client对象
 	err, pCtx, master := newJettonMasterClient(jettonMinterAddr)
 	if err != nil || nil == master || nil == pCtx {
 		return errors.New("new jetton master client failed")
 	}
 	// 获取jetton wallet对象, 获取from地址的jetton wallet对象
-	fromAddr := w.WalletAddress()
+	fromAddr := transferWallet.WalletAddress()
 	tokenWallet, err := master.GetJettonWallet(*pCtx, fromAddr)
 	if err != nil || tokenWallet == nil {
 		errMsg = "get jetton wallet failed."
 		log.Fatal(errMsg)
 	}
-
+	// 查询from的jetton余额
 	tokenBalance, err := tokenWallet.GetBalance(*pCtx)
 	if err != nil {
 		errMsg := fmt.Sprintf("get jetton wallet balance failed: %s", err.Error())
 		log.Fatal(errMsg)
 	}
+	// 转账前的token余额
 	coinBalance := tlb.MustFromNano(tokenBalance, jettonDecimals)
+	log.Printf("jetton minter address:%s\n", jettonMinterAddr)
 	log.Printf("from address:%s, jetton balance:%s, transfer amount:%s\n", fromAddr.String(), coinBalance.String(), transferAmount.String())
 
 	// 判断是否有足够的token余额
@@ -351,34 +358,43 @@ func TransferToken(jettonMinterAddr, receiveAddr, amount, comment string) error 
 	}
 
 	// 转账jetton token附加参数
-	payloadForward := &cell.Cell{}
-	if comment != "" {
-		commentCell, err := wallet.CreateCommentCell(comment)
-		if err != nil {
-			log.Fatal(err)
+	if payloadForward == nil && comment != "" {
+		payloadForward, err = wallet.CreateCommentCell(comment)
+		if err != nil || payloadForward == nil {
+			errMsg = fmt.Sprintf("create comment cell failed: %s", err.Error())
+			log.Fatal(errMsg)
+			return errors.New(errMsg)
 		}
-		payloadForward = commentCell
 	}
 
 	// address of receiver's wallet (not token wallet, just usual)
 	to := address.MustParseAddr(receiveAddr)
-	forwardGasFee := tlb.MustFromTON("0.05")
+	// 响应地址,一般为from地址
+	if responseAddr == "" {
+		responseAddr = fromAddr.String()
+	}
+	responseTo := address.MustParseAddr(responseAddr)
+	if forwardGasFee == "" {
+		forwardGasFee = "0.05"
+	}
+	forwardGasFeeCoin := tlb.MustFromTON(forwardGasFee)
 	// 构建转账参数
-	transferPayload, err := tokenWallet.BuildTransferPayloadV2(to, to, transferAmount, forwardGasFee, payloadForward, nil)
+	transferPayload, err := tokenWallet.BuildTransferPayloadV2(to, responseTo, transferAmount, forwardGasFeeCoin, payloadForward, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// your TON balance must be > 0.05 to send
-	_, gasFee := forwardGasFee.Add(tlb.MustFromTON("0.05"))
+	_, gasFee := forwardGasFeeCoin.Add(tlb.MustFromTON("0.05"))
 	msg := wallet.SimpleMessage(tokenWallet.Address(), gasFee, transferPayload)
 
 	log.Println("sending transfer jetton token transaction...")
-	tx, _, err := w.SendWaitTransaction(*pCtx, msg)
+	tx, _, err := transferWallet.SendWaitTransaction(*pCtx, msg)
 	if err != nil {
 		panic(err)
 	}
-	log.Println("transaction confirmed, hash:", base64.StdEncoding.EncodeToString(tx.Hash))
-	log.Printf(GetScanCfg()+"%s\n", receiveAddr)
+	txHash := hex.EncodeToString(tx.Hash)
+	// log.Println("transaction confirmed, hash:", txHash)
+	log.Printf(GetScanCfg()+"/transaction/%s\n", txHash)
 	return nil
 }

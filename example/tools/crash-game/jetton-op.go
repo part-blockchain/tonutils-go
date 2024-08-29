@@ -38,7 +38,7 @@ var transferReceiveAddr = flag.String("transfer_receive_addr", "0QB8_1jtzFEA3LIU
 var comment = flag.String("comment", "", "Transfer Jetton token comment")
 
 // Mint or Transfer Jetton token amount
-var amount = flag.String("amount", "0.000001", "Mint or Transfer Jetton token amount")
+var amount = flag.String("amount", "1", "Mint or Transfer Jetton token amount")
 
 func JettonOperation() {
 	if *jettonOpType != -1 {
@@ -52,7 +52,7 @@ func JettonOperation() {
 		case 3:
 			MintToken(*jettonMinterAddr, *mintReceiveAddr, *amount)
 		case 4:
-			TransferToken(*jettonMinterAddr, *transferReceiveAddr, *amount, *comment)
+			TransferToken(nil, *jettonMinterAddr, *transferReceiveAddr, "", *amount, *comment, "", nil)
 		default:
 			// do nothing
 			fmt.Println("Invalid jetton operation type")

@@ -58,6 +58,19 @@ func (c *Client) GetCrashGameData(ctx context.Context, showCode bool) (*Data, er
 	return c.GetCrashGameDataAtBlock(ctx, b, showCode)
 }
 
+// GetRoundNum 获取CrashGame合约的RoundNum
+func (c *Client) GetRoundNum(ctx context.Context) (uint64, error) {
+	b, err := c.api.CurrentMasterchainInfo(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get masterchain info: %w", err)
+	}
+	res, err := c.api.WaitForBlock(b.SeqNo).RunGetMethod(ctx, b, c.addr, "get_info")
+	if err != nil {
+		return 0, fmt.Errorf("failed to run get_info method by CrashGame contract: %w", err)
+	}
+	return getValueFromExecutionResult(res, 0, "roundNum", false).(*big.Int).Uint64(), nil
+}
+
 // 从执行结果中获取对应的值
 func getValueFromExecutionResult(res *ton.ExecutionResult, index uint, keyName string, isAddrType bool) (value interface{}) {
 	if res == nil || res.Length() <= index {
