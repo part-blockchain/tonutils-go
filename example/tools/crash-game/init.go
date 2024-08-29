@@ -14,19 +14,36 @@ import (
 	"sync"
 )
 
+// RpcCfg rpc配置
 type RpcCfg struct {
 	TestNetUrl string `json:"test_net"`
 	MainNetUrl string `json:"main_net"`
 }
 
+// JettonConfig jetton配置
 type JettonConfig struct {
 	MetaData         jetton.MetaData `json:"metadata"`
 	JettonMinterAddr string          `json:"jetton_minter_addr"`
 }
 
+// CrashGameConfig crash game配置
+type CrashGameConfig struct {
+	ContractAddr    string `json:"crash_game_addr"`
+	RoundNum        uint64 `json:"round_num"`
+	MinIntervalTime uint64 `json:"min_interval_time"` // 最大间隔时间,单位秒
+	Bet             struct {
+		Amount   string `json:"amount"`
+		Multiple uint64 `json:"multiple"`
+	} `json:"bet"`
+	Withdraw struct {
+		Amount string `json:"amount"`
+	} `json:"withdraw"`
+}
+
 type GlobalConfig struct {
-	Rpc    RpcCfg       `json:"rpc"`
-	Jetton JettonConfig `json:"jetton"`
+	Rpc          RpcCfg          `json:"rpc"`
+	Jetton       JettonConfig    `json:"jetton"`
+	CrashGameCfg CrashGameConfig `json:"crash_game"`
 }
 
 // api client instance
@@ -99,7 +116,7 @@ func GetGlobalCfg() (*GlobalConfig, error) {
 	cfg := &GlobalConfig{}
 	if *configPath == "" {
 		dir, _ := os.Getwd()
-		*configPath = fmt.Sprintf("%s/example/tools/jettons/config.json", dir)
+		*configPath = fmt.Sprintf("%s/example/tools/crash-game/config.json", dir)
 	}
 	fmt.Printf("global config file path: %s\n", *configPath)
 	data, err := ioutil.ReadFile(*configPath)

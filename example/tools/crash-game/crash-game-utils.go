@@ -11,13 +11,96 @@ import (
 	"github.com/xssnick/tonutils-go/tvm/cell"
 	"io/ioutil"
 	"log"
-	"math/big"
 	"os"
 	"strconv"
 )
 
+// CrashGameData crash game合约数据
+type CrashGameData struct {
+	RoundNum         uint64           //  游戏轮数
+	GameState        uint64           //  游戏状态: 0-bet; 1-游戏结束/未启动
+	Seed             uint64           //  随机数种子
+	CrashMultiple    uint64           // Crash乘数, 即爆炸倍数, 单位:%
+	PlayerNums       uint64           // 玩家数量
+	StartUnixTime    uint64           // 游戏开始时间(unix)
+	StartTxTime      uint64           // 游戏开始交易时间(unix)
+	StartBlkTime     uint64           // 游戏开始区块时间(unix)
+	MinIntervalTime  uint64           //  一轮游戏从创建完成到crash的最小时间间隔,单位秒
+	AdminAddr        *address.Address //  管理员地址
+	JettonMinterAddr *address.Address //  JettonMinter合约地址
+	JettonWalletCode *cell.Cell       //  JettonWallet合约代码
+	GameWalletCode   *cell.Cell       //  GameWallet合约代码
+	GameRecordCode   *cell.Cell       //  GameRecord合约代码
+}
+
+// 获取合约代码的code
+func getContractCode(contractCodeFilePath, fileName string) *cell.Cell {
+	if "" == contractCodeFilePath {
+		dir, _ := os.Getwd()
+		contractCodeFilePath = fmt.Sprintf("%s/example/tools/contracts/build/%s.cell", dir, fileName)
+	}
+	fmt.Printf("%s code file path: %s\n", fileName, contractCodeFilePath)
+	data, err := ioutil.ReadFile(contractCodeFilePath)
+	if err != nil {
+		fmt.Printf("get %s code failed:%s\n", fileName, err)
+		return nil
+	}
+	// 读取文件内容
+	codeCell, err := cell.FromBOC(data)
+	if err != nil {
+		fmt.Printf("get %s code FromBOC failed:%s\n", fileName, err)
+		panic(err)
+	}
+
+	return codeCell
+}
+
 // 获取crash game code
-func getCrashGameCode(jettonWalletCodeFilePath string) *cell.Cell {
+func getCrashGameCode(crashGameCodeFilePath string) *cell.Cell {
+	if "" == crashGameCodeFilePath {
+		dir, _ := os.Getwd()
+		crashGameCodeFilePath = fmt.Sprintf("%s/example/tools/contracts/build/crash-game.cell", dir)
+	}
+	fmt.Printf("crash game code file path: %s\n", crashGameCodeFilePath)
+	data, err := ioutil.ReadFile(crashGameCodeFilePath)
+	if err != nil {
+		fmt.Println("get crash game code failed:", err)
+		return nil
+	}
+	// 读取文件内容
+	codeCell, err := cell.FromBOC(data)
+	if err != nil {
+		fmt.Println("get crash game code failed:", err)
+		panic(err)
+	}
+
+	return codeCell
+}
+
+// 获取crash game wallet code
+func getGameWalletCode(gameWalletCodeFilePath string) *cell.Cell {
+	if "" == gameWalletCodeFilePath {
+		dir, _ := os.Getwd()
+		gameWalletCodeFilePath = fmt.Sprintf("%s/example/tools/contracts/build/game-wallet.cell", dir)
+	}
+	fmt.Printf("game wallet code file path: %s\n", gameWalletCodeFilePath)
+	data, err := ioutil.ReadFile(gameWalletCodeFilePath)
+	if err != nil {
+		fmt.Println("get jetton wallet code failed:", err)
+		return nil
+	}
+	// 读取文件内容
+	codeCell, err := cell.FromBOC(data)
+	if err != nil {
+		fmt.Println("get jetton wallet code failed:", err)
+		panic(err)
+	}
+
+	return codeCell
+}
+
+// 获取crash game record code
+func getGameRecordCode(jettonWalletCodeFilePath string) *cell.Cell {
 	if "" == jettonWalletCodeFilePath {
 		dir, _ := os.Getwd()
 		jettonWalletCodeFilePath = fmt.Sprintf("%s/example/tools/contracts/build/jetton-wallet.cell", dir)
@@ -39,28 +122,46 @@ func getCrashGameCode(jettonWalletCodeFilePath string) *cell.Cell {
 }
 
 // getDeployCrashGameData 获取部署CrashGame的data
-func getDeployCrashGameData(totalSupply *big.Int, owner *address.Address,
-	content jetton.ContentAny, jettonWalletCode *cell.Cell) (_ *cell.Cell, err error) {
+func getDeployCrashGameData(jettonMinterAddr *address.Address, adminAddr *address.Address,
+	jettonWalletCode *cell.Cell, gameWalletCode *cell.Cell, gameRecordCode *cell.Cell) (_ *cell.Cell, err error) {
 
-	conData, err := jetton.GenJettonContentCell(content)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert jetton minter content to cell: %w", err)
+	// 部署合约初始化数据
+	initData := &CrashGameData{
+		RoundNum:         0,                //  游戏轮数
+		GameState:        1,                //  游戏状态: 0-bet; 1-游戏结束/未启动
+		Seed:             0,                //  随机数种子
+		CrashMultiple:    0,                // Crash乘数, 即爆炸倍数, 单位:%
+		PlayerNums:       0,                // 玩家数量
+		StartUnixTime:    0,                // 游戏开始时间(unix)
+		StartTxTime:      0,                // 游戏开始交易时间(unix)
+		StartBlkTime:     0,                // 游戏开始区块时间(unix)
+		MinIntervalTime:  0,                //  一轮游戏从创建完成到crash的最小时间间隔,单位秒
+		AdminAddr:        adminAddr,        //  管理员地址
+		JettonMinterAddr: jettonMinterAddr, //  JettonMinter合约地址
+		JettonWalletCode: jettonWalletCode, //  JettonWallet合约代码
+		GameWalletCode:   gameWalletCode,   //  GameWallet合约代码
+		GameRecordCode:   gameRecordCode,   //  GameRecord合约代码
 	}
-	// 校验content hash
-	fmt.Printf("jetton content cell hash: %s\n", hex.EncodeToString(conData.Hash()))
+
 	data := cell.BeginCell().
-		MustStoreCoins(totalSupply.Uint64()). // total supply, 提示：不要用MustStoreUInt(totalSupply.Uint64(), 64)
-		MustStoreAddr(owner).
-		MustStoreRef(conData).
-		MustStoreRef(jettonWalletCode).
+		MustStoreUInt(initData.RoundNum, 32).
+		MustStoreUInt(initData.GameState, 32).
+		MustStoreUInt(initData.Seed, 32).
+		MustStoreUInt(initData.CrashMultiple, 32).
+		MustStoreUInt(initData.PlayerNums, 32).
+		MustStoreUInt(initData.StartUnixTime, 32).
+		MustStoreUInt(initData.StartTxTime, 64).
+		MustStoreUInt(initData.StartBlkTime, 64).
+		MustStoreUInt(initData.MinIntervalTime, 32).
+		MustStoreAddr(initData.AdminAddr).
+		MustStoreAddr(initData.JettonMinterAddr).
+		MustStoreRef(initData.JettonWalletCode).
+		MustStoreRef(initData.GameWalletCode).
+		MustStoreRef(initData.GameRecordCode).
 		EndCell()
 
 	// 校验data hash
-	fmt.Println("deploy jetton minter initialize data hash:", hex.EncodeToString(data.Hash()))
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert depoly jetton minter data to cell: %w", err)
-	}
-
+	fmt.Println("deploy crash game initialize data hash:", hex.EncodeToString(data.Hash()))
 	return data, nil
 }
 
@@ -81,41 +182,54 @@ func newCrashGameClient(jettonMinterAddr string) (error, *context.Context, *jett
 }
 
 // DeployCrashGame 部署CrashGame合约
-func DeployCrashGame(jettonMinterCodeFile, jettonWalletCodeFile string) error {
+func DeployCrashGame(jettonMinterAddr, jettonWalletCodeFile, gameWalletCodeFile, gameRecordCodeFile, crashGameCodeFile string) error {
 	if nil == TonAPI {
 		TonAPI = GetTonAPIIns()
 		if nil == TonAPI {
 			return errors.New("get ton api instance failed")
 		}
 	}
-	log.Println("Deploying jetton contract to ton blockchain...")
+	// 获取jetton全局配置
+	cfg, err := GetGlobalCfg()
+	if nil != err {
+		return err
+	}
+	if jettonMinterAddr == "" {
+		jettonMinterAddr = cfg.Jetton.JettonMinterAddr
+	}
+	// 生成钱包
 	err, w := genWalletByMnemonicWords(TonAPI, Seeds, WalletVersion)
 	if err != nil || nil == w {
 		return errors.New("generate wallet by seed words failed")
 	}
 
 	log.Println("Deploy wallet:", w.WalletAddress().String())
-	fmt.Println("Deploying jetton minter contract to ton blockchain...")
-	// 获取jetton全局配置
-	cfg, err := GetGlobalCfg()
-	if nil != err {
-		return err
-	}
 	// 生成部署合约数据（初始化合约数据）
-	deployData, err := getDeployJettonMinterData(big.NewInt(0), w.WalletAddress(), &cfg.Jetton.MetaData, getJettonWalletCode(jettonWalletCodeFile))
+	deployData, err := getDeployCrashGameData(address.MustParseAddr(jettonMinterAddr), w.WalletAddress(),
+		getContractCode(jettonWalletCodeFile, "jetton-wallet"), getContractCode(gameWalletCodeFile, "game-wallet"),
+		getContractCode(gameRecordCodeFile, "game-record"))
+
 	if nil != err {
-		return errors.New("get Deploy Jetton Minter Data failed")
+		return errors.New("get Deploy crash game Data failed")
 	}
 	msgBody := cell.BeginCell().EndCell()
-	addr, _, _, err := w.DeployContractWaitTransaction(context.Background(), tlb.MustFromTON("0.05"),
-		msgBody, getJettonMinterCode(jettonMinterCodeFile), deployData)
+	gasFee := tlb.MustFromTON("0.2")
+	crashGameCode := getContractCode(crashGameCodeFile, "crash-game")
+
+	netName := "test network"
+	if *IsMainNet {
+		netName = "main network"
+	}
+	fmt.Printf("Deploying crash game contract to ton %s...\n", netName)
+	addr, _, _, err := w.DeployContractWaitTransaction(context.Background(), gasFee,
+		msgBody, crashGameCode, deployData)
 	if err != nil {
 		panic(err)
 	}
 	// 浏览器展示部署合约的地址
 	fmt.Printf(GetScanCfg(), addr.String())
-	// 更新jetton minter地址
-	cfg.Jetton.JettonMinterAddr = addr.String()
+	// 更新crash game地址
+	cfg.CrashGameCfg.ContractAddr = addr.String()
 	if err = UpdateGlobalCfg(cfg); nil != err {
 		return err
 	}
