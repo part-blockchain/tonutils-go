@@ -22,11 +22,16 @@ var gameWalletCodeFile = flag.String("game_wallet_code_file", "", "game wallet c
 // crash game合约地址
 var crashGameAddr = flag.String("crash_game_addr", "", "crash game contract address")
 
+// 获取Crash Game合约信息
+var showCode = flag.Bool("show_code", false, "show contract code")
+
 func CrashGameOperation() {
 	if *gameOpType != -1 {
 		switch *gameOpType {
 		case 0:
 			DeployCrashGame(*jettonMinterAddr, *jettonWalletCodeFile, *gameWalletCodeFile, *gameRecordCodeFile, *crashGameCodeFile)
+		case 1:
+			GetCrashGameData(*crashGameAddr, *showCode)
 		default:
 			// do nothing
 			fmt.Println("Invalid crash game operation type")

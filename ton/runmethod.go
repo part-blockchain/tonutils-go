@@ -147,6 +147,18 @@ func (c *APIClient) RunGetMethod(ctx context.Context, blockInfo *BlockIDExt, add
 	return nil, errUnexpectedResponse(resp)
 }
 
+func (r ExecutionResult) Length() uint {
+	return uint(len(r.result))
+}
+
+func (r ExecutionResult) Type(index uint) string {
+	if uint(len(r.result)) <= index {
+		return ""
+	}
+
+	return fmt.Sprintf("%T", r.result[index])
+}
+
 func (r ExecutionResult) AsTuple() []any {
 	return r.result
 }

@@ -3,11 +3,12 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/xssnick/tonutils-go/address"
 	"github.com/xssnick/tonutils-go/tlb"
-	"github.com/xssnick/tonutils-go/ton/jetton"
+	CrashGame "github.com/xssnick/tonutils-go/ton/crash-game"
 	"github.com/xssnick/tonutils-go/tvm/cell"
 	"io/ioutil"
 	"log"
@@ -15,23 +16,23 @@ import (
 	"strconv"
 )
 
-// CrashGameData crash game合约数据
-type CrashGameData struct {
-	RoundNum         uint64           //  游戏轮数
-	GameState        uint64           //  游戏状态: 0-bet; 1-游戏结束/未启动
-	Seed             uint64           //  随机数种子
-	CrashMultiple    uint64           // Crash乘数, 即爆炸倍数, 单位:%
-	PlayerNums       uint64           // 玩家数量
-	StartUnixTime    uint64           // 游戏开始时间(unix)
-	StartTxTime      uint64           // 游戏开始交易时间(unix)
-	StartBlkTime     uint64           // 游戏开始区块时间(unix)
-	MinIntervalTime  uint64           //  一轮游戏从创建完成到crash的最小时间间隔,单位秒
-	AdminAddr        *address.Address //  管理员地址
-	JettonMinterAddr *address.Address //  JettonMinter合约地址
-	JettonWalletCode *cell.Cell       //  JettonWallet合约代码
-	GameWalletCode   *cell.Cell       //  GameWallet合约代码
-	GameRecordCode   *cell.Cell       //  GameRecord合约代码
-}
+//// CrashGameData crash game合约数据
+//type CrashGameData struct {
+//	RoundNum         uint64           //  游戏轮数
+//	GameState        uint64           //  游戏状态: 0-bet; 1-游戏结束/未启动
+//	Seed             uint64           //  随机数种子
+//	CrashMultiple    uint64           // Crash乘数, 即爆炸倍数, 单位:%
+//	PlayerNums       uint64           // 玩家数量
+//	StartUnixTime    uint64           // 游戏开始时间(unix)
+//	StartTxTime      uint64           // 游戏开始交易时间(unix)
+//	StartBlkTime     uint64           // 游戏开始区块时间(unix)
+//	MinIntervalTime  uint64           //  一轮游戏从创建完成到crash的最小时间间隔,单位秒
+//	AdminAddr        *address.Address //  管理员地址
+//	JettonMinterAddr *address.Address //  JettonMinter合约地址
+//	JettonWalletCode *cell.Cell       //  JettonWallet合约代码
+//	GameWalletCode   *cell.Cell       //  GameWallet合约代码
+//	GameRecordCode   *cell.Cell       //  GameRecord合约代码
+//}
 
 // 获取合约代码的code
 func getContractCode(contractCodeFilePath, fileName string) *cell.Cell {
@@ -126,7 +127,7 @@ func getDeployCrashGameData(jettonMinterAddr *address.Address, adminAddr *addres
 	jettonWalletCode *cell.Cell, gameWalletCode *cell.Cell, gameRecordCode *cell.Cell) (_ *cell.Cell, err error) {
 
 	// 部署合约初始化数据
-	initData := &CrashGameData{
+	initData := &CrashGame.Data{
 		RoundNum:         0,                //  游戏轮数
 		GameState:        1,                //  游戏状态: 0-bet; 1-游戏结束/未启动
 		Seed:             0,                //  随机数种子
@@ -166,7 +167,7 @@ func getDeployCrashGameData(jettonMinterAddr *address.Address, adminAddr *addres
 }
 
 // newCrashGameClient 创建CrashGame合约对象 Client
-func newCrashGameClient(jettonMinterAddr string) (error, *context.Context, *jetton.Client) {
+func newCrashGameClient(crashGameAddr string) (error, *context.Context, *CrashGame.Client) {
 	if nil == TonAPI {
 		TonAPI = GetTonAPIIns()
 		if nil == TonAPI {
@@ -176,9 +177,9 @@ func newCrashGameClient(jettonMinterAddr string) (error, *context.Context, *jett
 	client := TonAPI.Client()
 	// bound all requests to single ton node
 	ctx := client.StickyContext(context.Background())
-	tokenContract := address.MustParseAddr(jettonMinterAddr)
-	master := jetton.NewJettonMasterClient(TonAPI, tokenContract)
-	return nil, &ctx, master
+	crashGameContract := address.MustParseAddr(crashGameAddr)
+	crashGameClient := CrashGame.NewCrashGameClient(TonAPI, crashGameContract)
+	return nil, &ctx, crashGameClient
 }
 
 // DeployCrashGame 部署CrashGame合约
@@ -237,39 +238,27 @@ func DeployCrashGame(jettonMinterAddr, jettonWalletCodeFile, gameWalletCodeFile,
 }
 
 // GetCrashGameData 获取CrashGame信息
-func GetCrashGameData(jettonMinterAddr string) (error, *jetton.Data) {
-	if "" == jettonMinterAddr {
+func GetCrashGameData(crashGameAddr string, showCode bool) (error, *CrashGame.Data) {
+	if "" == crashGameAddr {
 		// read from config file
 		cfg, err := GetGlobalCfg()
 		if nil != err {
 			return err, nil
 		}
-		jettonMinterAddr = cfg.Jetton.JettonMinterAddr
+		crashGameAddr = cfg.CrashGameCfg.ContractAddr
 	}
-	err, ctx, master := newJettonMasterClient(jettonMinterAddr)
-	if err != nil || nil == master || nil == ctx {
-		return errors.New("new jetton master client failed"), nil
+	err, ctx, crashGame := newCrashGameClient(crashGameAddr)
+	if err != nil || nil == crashGame || nil == ctx {
+		return errors.New("new crash game client failed"), nil
 	}
-	data, err := master.GetJettonData(*ctx)
-	if err != nil {
-		log.Fatal(err)
+	data, err := crashGame.GetCrashGameData(*ctx, showCode)
+	if err != nil || nil == data {
+		errMsg := "get crash game data failed"
+		log.Fatal(errMsg)
 	}
-
-	content := data.Content.(*jetton.MetaData)
-	log.Println("total supply:", data.TotalSupply.Uint64())
-	log.Println("mintable:", data.Mintable)
-	log.Println("admin addr:", data.AdminAddr)
-	log.Println("jetton content:")
-	log.Println("	name:", content.Name)
-	log.Println("	Description:", content.Description)
-	log.Println("	Symbol:", content.Symbol)
-	log.Println("	Decimals:", content.Decimals)
-	log.Println("	Image:", content.Image)
-	log.Println("	ImageData:", content.ImageData)
-	log.Println("	URI:", content.URI) // 链下
-	log.Println("	AmountStyle:", content.AmountStyle)
-	log.Println("	RenderType:", content.RenderType)
-
+	// json格式化输出
+	byData, _ := json.MarshalIndent(data, "", "    ")
+	log.Printf("crash game data:\n%v\n", string(byData))
 	return nil, data
 }
 
