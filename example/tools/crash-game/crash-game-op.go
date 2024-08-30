@@ -39,6 +39,9 @@ var betAmount = flag.String("bet_amount", "", "bet amount")
 var betMultiple = flag.Uint64("bet_multiple", 0, "bet multiple")
 var playerAddr = flag.String("player_addr", "", "player address")
 
+// crash游戏
+var roundNum = flag.Uint64("round_num", 0, "round number")
+
 func CrashGameOperation() {
 	if *gameOpType != -1 {
 		err := errors.New("")
@@ -54,7 +57,9 @@ func CrashGameOperation() {
 		case 4:
 			err = GetGameWalletInfo(*playerWalletIndex, *crashGameAddr, *playerAddr, *showCode)
 		case 5:
-			err = Crash(*crashGameAddr)
+			err = Crash(*crashGameAddr, *roundNum)
+		case 6:
+			err = GetGameRecordInfo(*crashGameAddr, *roundNum, *showCode)
 		default:
 			// do nothing
 			err = errors.New("invalid crash game operation type")

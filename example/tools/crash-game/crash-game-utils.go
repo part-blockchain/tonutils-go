@@ -199,6 +199,21 @@ func newGameWalletClient(gameWalletAddr *address.Address) (error, *context.Conte
 	return nil, &ctx, gameWalletClient
 }
 
+// newGameRecordClient 创建GameRecord合约对象 Client
+func newGameRecordClient(gameRecordAddr *address.Address) (error, *context.Context, *CrashGame.GameRecordClient) {
+	if nil == TonAPI {
+		TonAPI = GetTonAPIIns()
+		if nil == TonAPI {
+			return errors.New("get ton api instance failed"), nil, nil
+		}
+	}
+	client := TonAPI.Client()
+	// bound all requests to single ton node
+	ctx := client.StickyContext(context.Background())
+	gameRecordClient := CrashGame.NewGameRecordClient(TonAPI, gameRecordAddr)
+	return nil, &ctx, gameRecordClient
+}
+
 // DeployCrashGame 部署CrashGame合约
 func DeployCrashGame(jettonMinterAddr, jettonWalletCodeFile, gameWalletCodeFile, gameRecordCodeFile, crashGameCodeFile string) error {
 	if nil == TonAPI {
@@ -436,10 +451,13 @@ func GetGameWalletInfo(playerWalletIndex int, crashGameAddr, playerAddr string, 
 }
 
 // Crash Crash游戏
-func Crash(crashGameAddr string) error {
+func Crash(crashGameAddr string, roundNum uint64) error {
 	cfg, w := prepareBaseEnv(0) // admin wallet index
 	if "" == crashGameAddr {
 		crashGameAddr = cfg.CrashGameCfg.ContractAddr
+	}
+	if 0 == roundNum {
+		roundNum = cfg.CrashGameCfg.RoundNum
 	}
 	// 获取jetton minter client对象
 	err, pCtx, crashGame := newCrashGameClient(crashGameAddr)
@@ -456,9 +474,51 @@ func Crash(crashGameAddr string) error {
 	gasFeeCoin := tlb.MustFromTON(gasFee)
 	forwardGasFeeCoin := tlb.MustFromTON(fmt.Sprintf("%f", forwardGasFee))
 
-	if err, txHash = crashGame.Crash(pCtx, w, cfg.CrashGameCfg.RoundNum, gasFeeCoin, forwardGasFeeCoin); err != nil {
+	if err, txHash = crashGame.Crash(pCtx, w, roundNum, gasFeeCoin, forwardGasFeeCoin); err != nil {
 		log.Fatal(err)
 	}
 	log.Printf(GetScanCfg()+"transaction/%s\n", txHash)
+	return nil
+}
+
+func GetGameRecordInfo(crashGameAddr string, roundNum uint64, showCode bool) error {
+	cfg, _ := prepareBaseEnv(-1)
+	if "" == crashGameAddr {
+		crashGameAddr = cfg.CrashGameCfg.ContractAddr
+	}
+	if 0 == roundNum {
+		roundNum = cfg.CrashGameCfg.RoundNum
+	}
+	// 获取crash game client对象
+	err, pCtx, crashGame := newCrashGameClient(crashGameAddr)
+	if err != nil || nil == crashGame || nil == pCtx {
+		errMsg := fmt.Sprintf("new crash game client failed: %s", err.Error())
+		return errors.New(errMsg)
+	}
+
+	// 获取游戏记录地址
+	gameRecordAddr, err := crashGame.GetGameRecordAddr(*pCtx, roundNum)
+	if err != nil || nil == gameRecordAddr {
+		errMsg := fmt.Sprintf("get game record address failed: %s", err.Error())
+		return errors.New(errMsg)
+	}
+
+	// 构造game record合约客户端
+	err, pCtx, gameRecordClient := newGameRecordClient(gameRecordAddr)
+	if err != nil || nil == gameRecordClient || nil == pCtx {
+		return errors.New("new game record client failed")
+	}
+
+	log.Println("start to get game record info...")
+	// 获取游戏记录信息
+	data, err := gameRecordClient.GetGameRecordData(*pCtx, showCode)
+	if err != nil || nil == data {
+		errMsg := fmt.Sprintf("get game record info failed: %s", err.Error())
+		log.Println(errMsg)
+		return errors.New(errMsg)
+	}
+	// json格式化输出
+	byData, _ := json.MarshalIndent(data, "", "    ")
+	log.Printf("game record info:\n%v\n", string(byData))
 	return nil
 }
