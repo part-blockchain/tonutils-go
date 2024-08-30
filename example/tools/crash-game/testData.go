@@ -24,8 +24,9 @@ const (
 	WalletVersion = wallet.V3R2 // 钱包版本
 )
 
-// PlayerSeeds 玩家钱包的种子列表
+// PlayerSeeds 玩家钱包的种子列表, 0: crash game owner address, 1: player address, 2: player address
 var PlayerSeeds = []string{
+	"birth pattern then forest walnut then phrase walnut fan pumpkin pattern then cluster blossom verify then forest velvet pond fiction pattern collect then then",
 	"illegal slot soda divert cliff fantasy cousin injury party gap length era between tortoise network festival near enlist kiss safe gossip few imitate box",
 	"denial civil check glide innocent enforce lizard rather impact elder loyal whisper post trap wire lady model pond market range satisfy depth yard arch",
 }

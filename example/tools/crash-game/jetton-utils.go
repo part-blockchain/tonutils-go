@@ -135,7 +135,7 @@ func DeployJettonMinter(jettonMinterCodeFile, jettonWalletCodeFile string) error
 	log.Println("Deploy wallet:", w.WalletAddress().String())
 	fmt.Println("Deploying jetton minter contract to ton blockchain...")
 	// 获取jetton全局配置
-	cfg, err := GetGlobalCfg()
+	cfg, err := GetParamsCfg()
 	if nil != err {
 		return err
 	}
@@ -154,7 +154,7 @@ func DeployJettonMinter(jettonMinterCodeFile, jettonWalletCodeFile string) error
 	fmt.Printf(GetScanCfg()+"%s\n", addr.String())
 	// 更新jetton minter地址
 	cfg.Jetton.JettonMinterAddr = addr.String()
-	if err = UpdateGlobalCfg(cfg); nil != err {
+	if err = UpdateParamsCfg(cfg); nil != err {
 		return err
 	}
 	return nil
@@ -164,7 +164,7 @@ func DeployJettonMinter(jettonMinterCodeFile, jettonWalletCodeFile string) error
 func GetJettonData(jettonMinterAddr string) (error, *jetton.Data) {
 	if "" == jettonMinterAddr {
 		// read from config file
-		cfg, err := GetGlobalCfg()
+		cfg, err := GetParamsCfg()
 		if nil != err {
 			return err, nil
 		}
@@ -201,7 +201,7 @@ func GetJettonData(jettonMinterAddr string) (error, *jetton.Data) {
 func GetJettonWallet(jettonMinterAddr, ownerAddr string) error {
 	if "" == jettonMinterAddr {
 		// read from config file
-		cfg, err := GetGlobalCfg()
+		cfg, err := GetParamsCfg()
 		if nil != err {
 			return err
 		}
@@ -242,7 +242,7 @@ func GetJettonWallet(jettonMinterAddr, ownerAddr string) error {
 // MintToken 铸造Token
 func MintToken(jettonMinterAddr, receiveAddr, amount string) error {
 	// read from config file
-	cfg, err := GetGlobalCfg()
+	cfg, err := GetParamsCfg()
 	if nil != err {
 		return err
 	}
@@ -291,7 +291,7 @@ func TransferToken(transferWallet *wallet.Wallet, jettonMinterAddr, receiveAddr,
 	}
 
 	// read from config file
-	cfg, err := GetGlobalCfg()
+	cfg, err := GetParamsCfg()
 	if nil != err {
 		return err
 	}

@@ -6,6 +6,7 @@ import (
 
 func init() {
 	flag.Parse()
+	GetTonAPIIns()
 }
 
 func main() {

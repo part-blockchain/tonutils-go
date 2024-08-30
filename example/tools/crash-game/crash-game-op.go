@@ -53,6 +53,8 @@ func CrashGameOperation() {
 			err = Bet(*playerWalletIndex, *crashGameAddr, *betAmount, *betMultiple)
 		case 4:
 			err = GetGameWalletInfo(*playerWalletIndex, *crashGameAddr, *playerAddr, *showCode)
+		case 5:
+			err = Crash(*crashGameAddr)
 		default:
 			// do nothing
 			err = errors.New("invalid crash game operation type")

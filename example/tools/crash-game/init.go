@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/xssnick/tonutils-go/address"
 	"github.com/xssnick/tonutils-go/liteclient"
 	"github.com/xssnick/tonutils-go/ton"
+	CrashGame "github.com/xssnick/tonutils-go/ton/crash-game"
 	"github.com/xssnick/tonutils-go/ton/jetton"
+	"github.com/xssnick/tonutils-go/ton/wallet"
 	"io/ioutil"
 	"log"
 	"os"
@@ -40,7 +43,8 @@ type CrashGameConfig struct {
 	} `json:"withdraw"`
 }
 
-type GlobalConfig struct {
+// ParamsConfig 参数配置
+type ParamsConfig struct {
 	Rpc          RpcCfg          `json:"rpc"`
 	Jetton       JettonConfig    `json:"jetton"`
 	CrashGameCfg CrashGameConfig `json:"crash_game"`
@@ -95,9 +99,65 @@ func GetTonAPIIns() ton.APIClientWrapped {
 	return TonAPI
 }
 
+// CallEnvCfg 合约Call调用的环境配置
+type CallEnvCfg struct {
+	// CrashGame合约地址
+	CrashGameAddr *address.Address
+	// 参数配置
+	ParamsCfg *ParamsConfig
+	// 钱包对象
+	Wallet *wallet.Wallet
+	// Jetton客户端对象
+	JettonClient *jetton.Client
+	// CrashGame客户端对象
+	CrashGameClient *CrashGame.Client
+	// GameWallet客户端对象
+	GameWalletClient *CrashGame.GameWalletClient
+}
+
+// 环境准备
+func prepareEnvCfg(walletIndex int) *CallEnvCfg {
+	callEvnCfg := &CallEnvCfg{}
+	// 基础环境
+	cfg, w := prepareBaseEnv(walletIndex)
+	callEvnCfg.ParamsCfg = cfg
+	callEvnCfg.Wallet = w
+
+	// 业务环境
+	// 获取Jetton客户端
+
+	return callEvnCfg
+}
+
+// 环境准备
+func prepareBaseEnv(walletIndex int) (*ParamsConfig, *wallet.Wallet) {
+	// read from config file
+	cfg, err := GetParamsCfg()
+	if nil != err {
+		log.Fatal("get global config failed")
+	}
+
+	if nil == TonAPI {
+		TonAPI = GetTonAPIIns()
+		if nil == TonAPI {
+			log.Fatal("get ton api instance failed")
+		}
+	}
+
+	// 获取玩家钱包
+	w := &wallet.Wallet{}
+	if walletIndex < 0 {
+		w = nil
+	} else {
+		w = getWalletByIndex(TonAPI, walletIndex, WalletVersion)
+	}
+
+	return cfg, w
+}
+
 func GetJettonMetaData() (error, *jetton.MetaData) {
 	// 生成jetton minter合约的content
-	cfg, err := GetGlobalCfg()
+	cfg, err := GetParamsCfg()
 	if nil != err {
 		return err, nil
 	}
@@ -112,8 +172,9 @@ func GetScanCfg() string {
 	}
 }
 
-func GetGlobalCfg() (*GlobalConfig, error) {
-	cfg := &GlobalConfig{}
+// GetParamsCfg 获取参数配置
+func GetParamsCfg() (*ParamsConfig, error) {
+	cfg := &ParamsConfig{}
 	if *configPath == "" {
 		dir, _ := os.Getwd()
 		*configPath = fmt.Sprintf("%s/example/tools/crash-game/config.json", dir)
@@ -132,8 +193,8 @@ func GetGlobalCfg() (*GlobalConfig, error) {
 	return cfg, nil
 }
 
-// UpdateGlobalCfg 更新全局配置，将配置写入config.json文件
-func UpdateGlobalCfg(cfg *GlobalConfig) error {
+// UpdateParamsCfg 更新参数配置，将配置写入config.json文件
+func UpdateParamsCfg(cfg *ParamsConfig) error {
 	if *configPath == "" || cfg == nil {
 		errMsg := "config path or config data is empty"
 		fmt.Println(errMsg)

@@ -22,7 +22,7 @@ const (
 )
 
 // 获取玩家的钱包
-func getPlayerWallet(api wallet.TonAPI, walletIndex int, version wallet.Version) *wallet.Wallet {
+func getWalletByIndex(api wallet.TonAPI, walletIndex int, version wallet.Version) *wallet.Wallet {
 	// 获取玩家钱包
 	if walletIndex >= len(PlayerSeeds) {
 		log.Fatal("player wallet index out of range")
@@ -208,7 +208,7 @@ func DeployCrashGame(jettonMinterAddr, jettonWalletCodeFile, gameWalletCodeFile,
 		}
 	}
 	// 获取jetton全局配置
-	cfg, err := GetGlobalCfg()
+	cfg, err := GetParamsCfg()
 	if nil != err {
 		return err
 	}
@@ -249,7 +249,7 @@ func DeployCrashGame(jettonMinterAddr, jettonWalletCodeFile, gameWalletCodeFile,
 	fmt.Printf(GetScanCfg()+"transaction/%s\n", hex.EncodeToString(tx.Hash))
 	// 更新crash game地址
 	cfg.CrashGameCfg.ContractAddr = addr.String()
-	if err = UpdateGlobalCfg(cfg); nil != err {
+	if err = UpdateParamsCfg(cfg); nil != err {
 		return err
 	}
 	return nil
@@ -259,7 +259,7 @@ func DeployCrashGame(jettonMinterAddr, jettonWalletCodeFile, gameWalletCodeFile,
 func GetCrashGameData(crashGameAddr string, showCode bool) (error, *CrashGame.Data) {
 	if "" == crashGameAddr {
 		// read from config file
-		cfg, err := GetGlobalCfg()
+		cfg, err := GetParamsCfg()
 		if nil != err {
 			return err, nil
 		}
@@ -283,7 +283,7 @@ func GetCrashGameData(crashGameAddr string, showCode bool) (error, *CrashGame.Da
 // NewRound 创建新的一轮游戏
 func NewRound(crashGameAddr string) error {
 	// read from config file
-	cfg, err := GetGlobalCfg()
+	cfg, err := GetParamsCfg()
 	if nil != err {
 		return err
 	}
@@ -334,7 +334,7 @@ func NewRound(crashGameAddr string) error {
 	log.Printf(GetScanCfg()+"transaction/%s\n", txHash)
 	// 更新round number
 	cfg.CrashGameCfg.RoundNum = afterRoundNum
-	if err = UpdateGlobalCfg(cfg); nil != err {
+	if err = UpdateParamsCfg(cfg); nil != err {
 		return err
 	}
 	return nil
@@ -349,12 +349,12 @@ func Bet(playerWalletIndex int, crashGameAddr, betAmount string, betMultiple uin
 		}
 	}
 	// 获取玩家钱包
-	w := getPlayerWallet(TonAPI, playerWalletIndex, WalletVersion)
+	w := getWalletByIndex(TonAPI, playerWalletIndex, WalletVersion)
 	if nil == w {
 		return errors.New("generate wallet by seed words failed")
 	}
 	// read from config file
-	cfg, err := GetGlobalCfg()
+	cfg, err := GetParamsCfg()
 	if nil != err {
 		return err
 	}
@@ -397,26 +397,10 @@ func Bet(playerWalletIndex int, crashGameAddr, betAmount string, betMultiple uin
 
 // GetGameWalletInfo 获取game wallet信息
 func GetGameWalletInfo(playerWalletIndex int, crashGameAddr, playerAddr string, showCode bool) error {
+	cfg, w := prepareBaseEnv(playerWalletIndex) // admin wallet index
 	// 玩家地址
 	if playerAddr == "" {
-		w := getPlayerWallet(TonAPI, playerWalletIndex, WalletVersion)
-		if nil == w {
-			return errors.New("generate wallet by seed words failed")
-		}
 		playerAddr = w.WalletAddress().String()
-	}
-
-	if nil == TonAPI {
-		TonAPI = GetTonAPIIns()
-		if nil == TonAPI {
-			return errors.New("get ton api instance failed")
-		}
-	}
-
-	// read from config file
-	cfg, err := GetGlobalCfg()
-	if nil != err {
-		return err
 	}
 	if "" == crashGameAddr {
 		crashGameAddr = cfg.CrashGameCfg.ContractAddr
@@ -448,5 +432,33 @@ func GetGameWalletInfo(playerWalletIndex int, crashGameAddr, playerAddr string, 
 	// json格式化输出
 	byData, _ := json.MarshalIndent(data, "", "    ")
 	log.Printf("game wallet data:\n%v\n", string(byData))
+	return nil
+}
+
+// Crash Crash游戏
+func Crash(crashGameAddr string) error {
+	cfg, w := prepareBaseEnv(0) // admin wallet index
+	if "" == crashGameAddr {
+		crashGameAddr = cfg.CrashGameCfg.ContractAddr
+	}
+	// 获取jetton minter client对象
+	err, pCtx, crashGame := newCrashGameClient(crashGameAddr)
+	if err != nil || nil == crashGame || nil == pCtx {
+		return errors.New("new crash game client failed")
+	}
+	log.Println("start to crash game...")
+
+	txHash := ""
+	// 计算gas fee
+	betGasFee := 0.05
+	forwardGasFee := 0.05
+	gasFee := fmt.Sprintf("%f", betGasFee+forwardGasFee)
+	gasFeeCoin := tlb.MustFromTON(gasFee)
+	forwardGasFeeCoin := tlb.MustFromTON(fmt.Sprintf("%f", forwardGasFee))
+
+	if err, txHash = crashGame.Crash(pCtx, w, cfg.CrashGameCfg.RoundNum, gasFeeCoin, forwardGasFeeCoin); err != nil {
+		log.Fatal(err)
+	}
+	log.Printf(GetScanCfg()+"transaction/%s\n", txHash)
 	return nil
 }
