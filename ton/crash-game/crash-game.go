@@ -58,6 +58,24 @@ func (c *Client) GetCrashGameData(ctx context.Context, showCode bool) (*Data, er
 	return c.GetCrashGameDataAtBlock(ctx, b, showCode)
 }
 
+// GetUserGameWalletAddr 获取用户的游戏钱包地址
+func (c *Client) GetUserGameWalletAddr(ctx context.Context, ownerAddr *address.Address) (*address.Address, error) {
+	b, err := c.api.CurrentMasterchainInfo(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get masterchain info: %w", err)
+	}
+	res, err := c.api.WaitForBlock(b.SeqNo).RunGetMethod(ctx, b, c.addr, "get_user_game_wallet_addr",
+		cell.BeginCell().MustStoreAddr(ownerAddr).EndCell().BeginParse())
+	if err != nil {
+		return nil, fmt.Errorf("failed to run get_user_game_wallet_addr method by CrashGame contract: %w", err)
+	}
+	value, err := res.Slice(0)
+	if err != nil {
+		return nil, err
+	}
+	return value.LoadAddr()
+}
+
 // GetRoundNum 获取CrashGame合约的RoundNum
 func (c *Client) GetRoundNum(ctx context.Context) (uint64, error) {
 	b, err := c.api.CurrentMasterchainInfo(ctx)
