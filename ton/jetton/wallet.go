@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
+	"log"
 	"math/big"
 
 	"github.com/xssnick/tonutils-go/address"
@@ -123,28 +124,48 @@ func (c *WalletClient) BuildTransferPayload(to *address.Address, amountCoins, am
 }
 
 func (c *WalletClient) BuildTransferPayloadV2(to, responseTo *address.Address, amountCoins, amountForwardTON tlb.Coins, payloadForward, customPayload *cell.Cell) (*cell.Cell, error) {
-	if payloadForward == nil {
-		payloadForward = cell.BeginCell().EndCell()
-	}
 
 	buf := make([]byte, 8)
 	if _, err := rand.Read(buf); err != nil {
 		return nil, err
 	}
 	rnd := binary.LittleEndian.Uint64(buf)
+	log.Println("rnd(QueryID):", rnd)
 
-	body, err := tlb.ToCell(TransferPayload{
-		QueryID:             rnd,
-		Amount:              amountCoins,
-		Destination:         to,
-		ResponseDestination: responseTo,
-		CustomPayload:       customPayload,
-		ForwardTONAmount:    amountForwardTON,
-		ForwardPayload:      payloadForward,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert TransferPayload to cell: %w", err)
+	if payloadForward == nil {
+		payloadForward = cell.BeginCell().EndCell()
 	}
+
+	if customPayload == nil {
+		customPayload = cell.BeginCell().EndCell()
+	}
+
+	// 当payloadForward不为nil时，转账jetton需要响应transfer_notification, 需要使用MustStoreMaybeRef进行存储，
+	// 否则会出现is_right=false，如存储comment，可使用MustStoreRef
+	body := cell.BeginCell().
+		MustStoreUInt(OpBet, 32).
+		MustStoreUInt(rnd, 64).
+		MustStoreBigCoins(amountCoins.Nano()).
+		MustStoreAddr(to).
+		MustStoreAddr(responseTo).
+		MustStoreMaybeRef(customPayload).
+		MustStoreBigCoins(amountForwardTON.Nano()).
+		MustStoreMaybeRef(payloadForward).
+		EndCell()
+
+	// 普通jetton转账(带文本提示的payload)
+	//body, err := tlb.ToCell(TransferPayload{
+	//	QueryID:             0,
+	//	Amount:              amountCoins,
+	//	Destination:         to,
+	//	ResponseDestination: responseTo,
+	//	CustomPayload:       customPayload,
+	//	ForwardTONAmount:    amountForwardTON,
+	//	ForwardPayload:      payloadForward,
+	//})
+	//if err != nil {
+	//	return nil, fmt.Errorf("failed to convert TransferPayload to cell: %w", err)
+	//}
 
 	return body, nil
 }

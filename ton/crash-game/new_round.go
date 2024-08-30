@@ -53,6 +53,6 @@ func (c *Client) NewRound(ctx *context.Context, w *wallet.Wallet) (error, string
 		panic(err)
 	}
 	txHash := hex.EncodeToString(tx.Hash)
-	log.Println("transaction confirmed, hash:", txHash)
+	// log.Println("transaction confirmed, hash:", txHash)
 	return nil, txHash
 }

@@ -8,4 +8,7 @@ const (
 	OpBurn                 = 0x595f07bc
 	OpBurnNotification     = 0x7bdd97de
 	OpMint                 = 21
+
+	// CrashGame OpType
+	OpBet = 0xf8a7ea5
 )

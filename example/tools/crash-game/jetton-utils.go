@@ -383,6 +383,7 @@ func TransferToken(transferWallet *wallet.Wallet, jettonMinterAddr, receiveAddr,
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Printf("transferPayload hash:%s\n", hex.EncodeToString(transferPayload.Hash()))
 
 	// your TON balance must be > 0.05 to send
 	_, gasFee := forwardGasFeeCoin.Add(tlb.MustFromTON("0.05"))

@@ -224,13 +224,14 @@ func DeployCrashGame(jettonMinterAddr, jettonWalletCodeFile, gameWalletCodeFile,
 		netName = "main network"
 	}
 	fmt.Printf("Deploying crash game contract to ton %s...\n", netName)
-	addr, _, _, err := w.DeployContractWaitTransaction(context.Background(), gasFee,
+	addr, tx, _, err := w.DeployContractWaitTransaction(context.Background(), gasFee,
 		msgBody, crashGameCode, deployData)
 	if err != nil {
 		panic(err)
 	}
 	// 浏览器展示部署合约的地址
 	fmt.Printf(GetScanCfg()+"%s\n", addr.String())
+	fmt.Printf(GetScanCfg()+"transaction/%s\n", hex.EncodeToString(tx.Hash))
 	// 更新crash game地址
 	cfg.CrashGameCfg.ContractAddr = addr.String()
 	if err = UpdateGlobalCfg(cfg); nil != err {
@@ -306,6 +307,7 @@ func NewRound(crashGameAddr string) error {
 	if err != nil {
 		return err
 	}
+	// 等待交易确认，新的round number上链
 	for {
 		if afterRoundNum > beforeRoundNum {
 			break
@@ -363,6 +365,8 @@ func Bet(playerWalletIndex int, crashGameAddr, betAmount string, betMultiple uin
 		MustStoreUInt(data.RoundNum, 32).
 		MustStoreUInt(betMultiple, 32).
 		EndCell()
+
+	log.Printf("betPayLoad hash:%s\n", hex.EncodeToString(betPayload.Hash()))
 	// 计算gas fee
 	betGasFee := 0.05
 	notifyGasFee := 0.05
