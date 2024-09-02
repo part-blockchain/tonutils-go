@@ -2,12 +2,27 @@ package crash_game
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"github.com/xssnick/tonutils-go/address"
+	"github.com/xssnick/tonutils-go/tlb"
 	"github.com/xssnick/tonutils-go/ton"
+	"github.com/xssnick/tonutils-go/ton/wallet"
 	"github.com/xssnick/tonutils-go/tvm/cell"
+	"log"
 	"math/big"
 )
+
+// SettlementPayload settlement payload
+type SettlementPayload struct {
+	_             tlb.Magic        `tlb:"#bbc88046"` // settlement opcode
+	QueryID       uint64           `tlb:"## 64"`
+	RoundNum      uint64           `tlb:"## 32"` // round number, 32 bits
+	ForwardGasFee tlb.Coins        `tlb:"."`
+	SettleAddr    *address.Address `tlb:"addr"`
+}
 
 // GameWalletData game wallet合约存储数据
 type GameWalletData struct {
@@ -65,4 +80,49 @@ func (c *GameWalletClient) GetGameWalletDataAtBlock(ctx context.Context, b *ton.
 	}
 
 	return data, nil
+}
+
+// BuildSettlementPayload 生成settlement的Payload
+func (c *GameWalletClient) BuildSettlementPayload(roundNum uint64, forwardGasFee tlb.Coins, settleAddr *address.Address) (*cell.Cell, error) {
+
+	buf := make([]byte, 8)
+	if _, err := rand.Read(buf); err != nil {
+		return nil, err
+	}
+	rnd := binary.LittleEndian.Uint64(buf)
+	log.Println("rnd(QueryID):", rnd)
+	txPayload := SettlementPayload{
+		QueryID:       rnd,
+		RoundNum:      roundNum,
+		ForwardGasFee: forwardGasFee,
+		SettleAddr:    settleAddr,
+	}
+
+	body, err := tlb.ToCell(txPayload)
+	if err != nil {
+		return nil, err
+	}
+
+	return body, nil
+}
+
+// Settlement 结算游戏
+func (c *GameWalletClient) Settlement(ctx *context.Context, w *wallet.Wallet, roundNum uint64, gasFee, forwardGasFee tlb.Coins, settleAddr *address.Address) (error, string) {
+	settlePayload, err := c.BuildSettlementPayload(roundNum, forwardGasFee, settleAddr)
+	if err != nil {
+		log.Fatalln("build settlement payload failed:", err.Error())
+		return err, ""
+	}
+	log.Printf("settlePayload hash:%s\n", hex.EncodeToString(settlePayload.Hash()))
+	// your TON balance must be > 0.05 to send
+	msg := wallet.SimpleMessage(c.addr, gasFee, settlePayload)
+
+	log.Println("sending settlement transaction...")
+	tx, _, err := w.SendWaitTransaction(*ctx, msg)
+	if err != nil {
+		panic(err)
+	}
+	txHash := hex.EncodeToString(tx.Hash)
+	// log.Println("transaction confirmed, hash:", txHash)
+	return nil, txHash
 }

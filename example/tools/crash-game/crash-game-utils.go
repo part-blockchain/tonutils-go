@@ -481,6 +481,7 @@ func Crash(crashGameAddr string, roundNum uint64) error {
 	return nil
 }
 
+// GetGameRecordInfo 获取游戏记录信息
 func GetGameRecordInfo(crashGameAddr string, roundNum uint64, showCode bool) error {
 	cfg, _ := prepareBaseEnv(-1)
 	if "" == crashGameAddr {
@@ -520,5 +521,60 @@ func GetGameRecordInfo(crashGameAddr string, roundNum uint64, showCode bool) err
 	// json格式化输出
 	byData, _ := json.MarshalIndent(data, "", "    ")
 	log.Printf("game record info:\n%v\n", string(byData))
+	return nil
+}
+
+// Settlement 玩家结算游戏
+func Settlement(playerWalletIndex int, crashGameAddr, settleAddr string, roundNum uint64) error {
+	cfg, w := prepareBaseEnv(playerWalletIndex)
+	if w == nil {
+		return errors.New("generate player wallet by seed words failed")
+	}
+	if "" == crashGameAddr {
+		crashGameAddr = cfg.CrashGameCfg.ContractAddr
+	}
+
+	if "" == settleAddr {
+		settleAddr = w.WalletAddress().String()
+	}
+
+	if 0 == roundNum {
+		roundNum = cfg.CrashGameCfg.RoundNum
+	}
+
+	sender := w.WalletAddress()
+	log.Printf("settlement info: {crash game address:%s, sender address:%s, settle user address:%s, roundNum:%d}\n",
+		crashGameAddr, sender.String(), settleAddr, roundNum)
+
+	err, ctx, crashGame := newCrashGameClient(crashGameAddr)
+	if err != nil || nil == crashGame || nil == ctx {
+		return errors.New("new crash game client failed")
+	}
+	// 计算玩家的游戏钱包地址
+	gameWalletAddr, err := crashGame.GetUserGameWalletAddr(*ctx, address.MustParseAddr(settleAddr))
+	if err != nil || nil == gameWalletAddr {
+		return errors.New("get user game wallet address failed")
+	}
+
+	// 构造game wallet合约客户端
+	err, ctx, gameWalletClient := newGameWalletClient(gameWalletAddr)
+	if err != nil || nil == crashGame || nil == ctx {
+		return errors.New("new game wallet client failed")
+	}
+
+	txHash := ""
+	// 计算gas fee
+	betGasFee := 0.05
+	jettonForwardGasFee := 0.1
+	forwardGasFee := 2*betGasFee + jettonForwardGasFee
+	forwardGasFeeCoin := tlb.MustFromTON(fmt.Sprintf("%f", forwardGasFee))
+	gasFee := fmt.Sprintf("%f", betGasFee+forwardGasFee)
+	gasFeeCoin := tlb.MustFromTON(gasFee)
+
+	// 调用结算方法
+	if err, txHash = gameWalletClient.Settlement(ctx, w, roundNum, gasFeeCoin, forwardGasFeeCoin, address.MustParseAddr(settleAddr)); err != nil {
+		log.Fatal(err)
+	}
+	log.Printf(GetScanCfg()+"transaction/%s\n", txHash)
 	return nil
 }
