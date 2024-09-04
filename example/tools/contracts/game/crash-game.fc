@@ -164,8 +164,8 @@
         storage::game_state = 1;
         ;; 生成随机数
         randomize_lt();
-        ;; 从1100到1000000取随机数作为种子seed，crash乘数等于990000除以seed，单位：%。crash乘数范围：[100%, 1000%] 
-        storage::seed = rand(1000000); ;; 生成一个随机数（0到1000000）
+        ;; 从1100到1000000取随机数作为种子seed，crash乘数等于990000除以seed，单位：%。crash乘数范围：[100%, 1100%] 
+        storage::seed = rand(100000); ;; 生成一个随机数（0到1000000）
         if(storage::seed < 1100) {
             storage::seed = storage::seed + 1100;
         }

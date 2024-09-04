@@ -198,18 +198,18 @@ func GetJettonData(jettonMinterAddr string) (error, *jetton.Data) {
 }
 
 // GetJettonWallet 获取Jetton Wallet Data信息
-func GetJettonWallet(jettonMinterAddr, ownerAddr string) error {
+func GetJettonWallet(jettonMinterAddr, ownerAddr string) (error, *jetton.JettonWalletData) {
 	if "" == jettonMinterAddr {
 		// read from config file
 		cfg, err := GetParamsCfg()
 		if nil != err {
-			return err
+			return err, nil
 		}
 		jettonMinterAddr = cfg.Jetton.JettonMinterAddr
 	}
 	err, pCtx, master := newJettonMasterClient(jettonMinterAddr)
 	if err != nil || nil == master || nil == pCtx {
-		return errors.New("new jetton master client failed")
+		return errors.New("new jetton master client failed"), nil
 	}
 	ctx := *pCtx
 	tokenWallet, err := master.GetJettonWallet(ctx, address.MustParseAddr(ownerAddr))
@@ -225,7 +225,7 @@ func GetJettonWallet(jettonMinterAddr, ownerAddr string) error {
 	// 获取jetton minter合约的content
 	err, metadata := GetJettonMetaData()
 	if nil != err {
-		return err
+		return err, nil
 	}
 	decimals, err := strconv.Atoi(metadata.Decimals)
 	if nil != err {
@@ -236,7 +236,7 @@ func GetJettonWallet(jettonMinterAddr, ownerAddr string) error {
 	log.Println("jetton wallet address:", tokenWallet.Address().String())
 	log.Println("jetton balance:", tlb.MustFromNano(jettonWalletData.Balance, decimals))
 
-	return nil
+	return nil, jettonWalletData
 }
 
 // MintToken 铸造Token

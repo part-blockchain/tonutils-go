@@ -14,7 +14,6 @@ Crash Game合约操作：
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"flag"
 	"log"
@@ -56,9 +55,7 @@ func CrashGameOperation() {
 		case 0:
 			err = DeployCrashGame(*jettonMinterAddr, *jettonWalletCodeFile, *gameWalletCodeFile, *gameRecordCodeFile, *crashGameCodeFile)
 		case 1:
-			_, data := GetCrashGameData(*crashGameAddr, *showCode)
-			byData, _ := json.MarshalIndent(data, "", "    ")
-			log.Printf("crash game data:\n%v\n", string(byData))
+			err, _ = GetCrashGameInfo(*crashGameAddr, *showCode)
 		case 2:
 			err = NewRound(*crashGameAddr)
 		case 3:
@@ -68,7 +65,7 @@ func CrashGameOperation() {
 		case 5:
 			err = Crash(*crashGameAddr, *roundNum)
 		case 6:
-			err = GetGameRecordInfo(*crashGameAddr, *roundNum, *showCode)
+			err, _ = GetGameRecordInfo(*crashGameAddr, *roundNum, *showCode)
 		case 7:
 			err = Settlement(*playerWalletIndex, *crashGameAddr, *settleAddr, *roundNum)
 		default:

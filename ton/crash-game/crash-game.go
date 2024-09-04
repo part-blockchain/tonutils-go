@@ -19,6 +19,24 @@ type TonApi interface {
 	SubscribeOnTransactions(workerCtx context.Context, addr *address.Address, lastProcessedLT uint64, channel chan<- *tlb.Transaction)
 }
 
+type JettonWalletInfo struct {
+	JettonMinterAddr *address.Address
+	JettonWalletAddr *address.Address
+	Balance          *big.Int
+}
+
+type GameRecordInfo struct {
+	ContractAddr *address.Address
+	Data         *GameRecordData
+}
+
+type CrashGameInfo struct {
+	ContractAddr     *address.Address // CrashGame合约地址
+	Data             *Data            // CrashGame合约数据
+	JettonWalletInfo JettonWalletInfo // JettonWallet合约信息
+	GameRecordInfo   GameRecordInfo   // GameRecord合约信息
+}
+
 // Data crash game合约存储数据
 type Data struct {
 	RoundNum         uint64           //  游戏轮数

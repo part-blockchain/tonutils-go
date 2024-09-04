@@ -22,8 +22,8 @@
         "jetton_minter_addr": "EQB3P0QJS57NYXRYD5sTeCuhmEo82mLujpV00u91D6bQ2TG3"
     },
     "crash_game": {
-        "crash_game_addr": "EQDW-r6Xh-UeF3SNq4by0xkffkIwMsOSh7NIp59pWFMguN-9",
-        "round_num": 3,
+        "crash_game_addr": "EQAlfKpvXOJjedEZzv2qLa2_QFHdR-uMYpx8JSSAQsVj7fWY",
+        "round_num": 30,
         "min_interval_time": 100,
         "bet": {
             "amount": "1",

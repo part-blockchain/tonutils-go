@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -270,7 +271,78 @@ func DeployCrashGame(jettonMinterAddr, jettonWalletCodeFile, gameWalletCodeFile,
 	return nil
 }
 
-// GetCrashGameData 获取CrashGame信息
+// GetCrashGameInfo 获取CrashGame信息
+func GetCrashGameInfo(crashGameAddr string, showCode bool) (error, *CrashGame.CrashGameInfo) {
+	// read from config file
+	cfg, err := GetParamsCfg()
+	if nil != err {
+		return err, nil
+	}
+	if "" == crashGameAddr {
+		crashGameAddr = cfg.CrashGameCfg.ContractAddr
+	}
+	err, ctx, crashGame := newCrashGameClient(crashGameAddr)
+	if err != nil || nil == crashGame || nil == ctx {
+		return errors.New("new crash game client failed"), nil
+	}
+	// CrashGame合约信息
+	info := CrashGame.CrashGameInfo{}
+	info.ContractAddr = address.MustParseAddr(crashGameAddr)
+	// 获取合约数据
+	data, err := crashGame.GetCrashGameData(*ctx, showCode)
+	if err != nil || nil == data {
+		errMsg := "get crash game data failed"
+		log.Fatal(errMsg)
+	}
+	// CrashGame合约数据
+	info.Data = data
+	info.JettonWalletInfo.JettonMinterAddr = address.MustParseAddr(cfg.Jetton.JettonMinterAddr)
+
+	// 获取crash game合约的jetton wallet信息
+	// 获取jetton minter client对象
+	err, pCtx, master := newJettonMasterClient(cfg.Jetton.JettonMinterAddr)
+	if err != nil || nil == master || nil == pCtx {
+		return errors.New("new jetton master client failed"), nil
+	}
+	tokenWallet, err := master.GetJettonWallet(*pCtx, info.ContractAddr)
+	if err != nil || tokenWallet == nil {
+		errMsg := "get jetton wallet failed."
+		log.Fatal(errMsg)
+	}
+
+	// 查询from的jetton余额
+	tokenBalance, err := tokenWallet.GetBalance(*pCtx)
+	if err != nil {
+		errMsg := fmt.Sprintf("get jetton wallet balance failed: %s", err.Error())
+		log.Fatal(errMsg)
+	}
+	// 转账前的token余额
+	jettonDecimals, _ := strconv.Atoi(cfg.Jetton.MetaData.Decimals)
+	coinBalance := tlb.MustFromNano(tokenBalance, jettonDecimals)
+	info.JettonWalletInfo.JettonWalletAddr = tokenWallet.Address()
+	info.JettonWalletInfo.Balance = coinBalance.Val()
+
+	// 获取游戏记录地址
+	gameRecordAddr, err := crashGame.GetGameRecordAddr(*pCtx, data.RoundNum)
+	if err != nil || nil == gameRecordAddr {
+		errMsg := fmt.Sprintf("get game record address failed: %s", err.Error())
+		return errors.New(errMsg), nil
+	}
+	info.GameRecordInfo.ContractAddr = gameRecordAddr
+	err, recordData := GetGameRecordInfo(crashGameAddr, data.RoundNum, showCode)
+	if err != nil || recordData == nil {
+		//errMsg := fmt.Sprintf("get game record info failed: %s", err.Error())
+		//log.Fatal(errMsg)
+	}
+
+	info.GameRecordInfo.Data = recordData
+	// json格式化输出
+	byData, _ := json.MarshalIndent(info, "", "    ")
+	log.Printf("crash game info:\n%v\n", string(byData))
+	return nil, &info
+}
+
+// GetCrashGameData 获取CrashGame合约数据
 func GetCrashGameData(crashGameAddr string, showCode bool) (error, *CrashGame.Data) {
 	if "" == crashGameAddr {
 		// read from config file
@@ -482,7 +554,7 @@ func Crash(crashGameAddr string, roundNum uint64) error {
 }
 
 // GetGameRecordInfo 获取游戏记录信息
-func GetGameRecordInfo(crashGameAddr string, roundNum uint64, showCode bool) error {
+func GetGameRecordInfo(crashGameAddr string, roundNum uint64, showCode bool) (error, *CrashGame.GameRecordData) {
 	cfg, _ := prepareBaseEnv(-1)
 	if "" == crashGameAddr {
 		crashGameAddr = cfg.CrashGameCfg.ContractAddr
@@ -494,20 +566,20 @@ func GetGameRecordInfo(crashGameAddr string, roundNum uint64, showCode bool) err
 	err, pCtx, crashGame := newCrashGameClient(crashGameAddr)
 	if err != nil || nil == crashGame || nil == pCtx {
 		errMsg := fmt.Sprintf("new crash game client failed: %s", err.Error())
-		return errors.New(errMsg)
+		return errors.New(errMsg), nil
 	}
 
 	// 获取游戏记录地址
 	gameRecordAddr, err := crashGame.GetGameRecordAddr(*pCtx, roundNum)
 	if err != nil || nil == gameRecordAddr {
 		errMsg := fmt.Sprintf("get game record address failed: %s", err.Error())
-		return errors.New(errMsg)
+		return errors.New(errMsg), nil
 	}
 
 	// 构造game record合约客户端
 	err, pCtx, gameRecordClient := newGameRecordClient(gameRecordAddr)
 	if err != nil || nil == gameRecordClient || nil == pCtx {
-		return errors.New("new game record client failed")
+		return errors.New("new game record client failed"), nil
 	}
 
 	log.Println("start to get game record info...")
@@ -516,12 +588,12 @@ func GetGameRecordInfo(crashGameAddr string, roundNum uint64, showCode bool) err
 	if err != nil || nil == data {
 		errMsg := fmt.Sprintf("get game record info failed: %s", err.Error())
 		log.Println(errMsg)
-		return errors.New(errMsg)
+		return errors.New(errMsg), nil
 	}
 	// json格式化输出
 	byData, _ := json.MarshalIndent(data, "", "    ")
 	log.Printf("game record info:\n%v\n", string(byData))
-	return nil
+	return nil, data
 }
 
 // Settlement 玩家结算游戏
