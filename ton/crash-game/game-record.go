@@ -12,6 +12,7 @@ import (
 // GameRecordData game record合约存储数据
 type GameRecordData struct {
 	RoundNum         uint64           //  游戏轮数
+	Seed             uint64           //  随机数种子
 	CrashMultiple    uint64           //  爆炸倍数, 单位:%
 	GameState        uint64           //  游戏状态: 0-bet; 1-游戏结束/未启动
 	PlayerNums       uint64           //  玩家数量
@@ -51,17 +52,18 @@ func (c *GameRecordClient) GetGameRecordDataAtBlock(ctx context.Context, b *ton.
 
 	data := &GameRecordData{
 		RoundNum:         getValueFromExecutionResult(res, 0, "RoundNum", false).(*big.Int).Uint64(),       //  游戏轮数
-		CrashMultiple:    getValueFromExecutionResult(res, 1, "CrashMultiple", false).(*big.Int).Uint64(),  //  爆炸倍数
-		GameState:        getValueFromExecutionResult(res, 2, "GameState", false).(*big.Int).Uint64(),      //  游戏状态
-		PlayerNums:       getValueFromExecutionResult(res, 3, "PlayerNums", false).(*big.Int).Uint64(),     //  玩家数量
-		CrashGameAddr:    getValueFromExecutionResult(res, 4, "CrashGameAddr", true).(*address.Address),    //  CrashGame合约地址
-		JettonMinterAddr: getValueFromExecutionResult(res, 5, "JettonMinterAddr", true).(*address.Address), //  JettonMinter合约地址
+		Seed:             getValueFromExecutionResult(res, 1, "Seed", false).(*big.Int).Uint64(),           //  随机种子
+		CrashMultiple:    getValueFromExecutionResult(res, 2, "CrashMultiple", false).(*big.Int).Uint64(),  //  爆炸倍数
+		GameState:        getValueFromExecutionResult(res, 3, "GameState", false).(*big.Int).Uint64(),      //  游戏状态
+		PlayerNums:       getValueFromExecutionResult(res, 4, "PlayerNums", false).(*big.Int).Uint64(),     //  玩家数量
+		CrashGameAddr:    getValueFromExecutionResult(res, 5, "CrashGameAddr", true).(*address.Address),    //  CrashGame合约地址
+		JettonMinterAddr: getValueFromExecutionResult(res, 6, "JettonMinterAddr", true).(*address.Address), //  JettonMinter合约地址
 	}
 
 	// 显示合约的code
 	if showCode {
-		data.JettonWalletCode = getValueFromExecutionResult(res, 6, "JettonWalletCode", false).(*cell.Cell) //  JettonWallet合约代码
-		data.GameWalletCode = getValueFromExecutionResult(res, 7, "GameWalletCode", false).(*cell.Cell)     //  GameWallet合约代码
+		data.JettonWalletCode = getValueFromExecutionResult(res, 7, "JettonWalletCode", false).(*cell.Cell) //  JettonWallet合约代码
+		data.GameWalletCode = getValueFromExecutionResult(res, 8, "GameWalletCode", false).(*cell.Cell)     //  GameWallet合约代码
 	}
 
 	return data, nil

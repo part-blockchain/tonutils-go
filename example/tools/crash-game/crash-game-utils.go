@@ -290,8 +290,8 @@ func GetCrashGameData(crashGameAddr string, showCode bool) (error, *CrashGame.Da
 		log.Fatal(errMsg)
 	}
 	// json格式化输出
-	byData, _ := json.MarshalIndent(data, "", "    ")
-	log.Printf("crash game data:\n%v\n", string(byData))
+	//byData, _ := json.MarshalIndent(data, "", "    ")
+	//log.Printf("crash game data:\n%v\n", string(byData))
 	return nil, data
 }
 

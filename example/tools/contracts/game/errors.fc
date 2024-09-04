@@ -12,7 +12,8 @@ const Transfer_Jetton_Amount_Is_Zero = 109;         ;; 转账Jetton金额为0
 const Sender_Is_Not_Crash_Game_Jetton_Wallet_Addr = 110;  ;; 发送者不是crash game的jetton wallet地址
 const Bet_Fee_Is_Not_Enough = 111;      ;; Bet的gas fee不足
 const Withdraw_Fee_Is_Not_Enough = 112;      ;; Withdraw的gas fee不足
-
+const Withdraw_To_Crash_Game_Self = 113;  ;; CrashGame赎回给自己，无意义
+const No_Player = 114;  ;; 无玩家参与此轮游戏
 
 ;; GameRecord
 const Sender_Is_Not_Crash_Game_Addr = 200;  ;; 发送者不是crash game地址
@@ -34,3 +35,10 @@ const Withdraw_Addr_Is_Not_Game_Wallet_Owner = 304;  ;; 赎回地址不是Game W
 const Sender_Is_Not_Game_Wallet_Owner_Jetton_Wallet_Addr = 305; 
 ;; 发送者不是Game Wallet的Jetton Wallet地址，结算到Game Wallet的地址，所以发送transfer_notification消息的是Game Wallet的Jetton Wallet(此方式已废弃，因为还需要从game wallet中赎回)
 const Sender_Is_Not_Game_Wallet_Jetton_Wallet_Addr = 306;  
+
+;; jetton
+const Transfer_Token_Gas_Fee_Is_Not_Enough = 400;      ;; 转账Jetton Token的Gas费用不足
+const Burn_Token_Gas_Fee_Is_Not_Enough = 401;          ;; Burn Jetton Token的Gas费用不足
+
+;; system
+const Wrong_Workchain = 700;

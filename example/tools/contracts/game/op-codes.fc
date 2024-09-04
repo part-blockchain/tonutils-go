@@ -7,7 +7,6 @@ int op::excesses() asm "0xd53276db PUSHINT";
 ;; CrashGame
 int op::new_round() asm "0x6cd87433 PUSHINT";  ;; 开启新的一轮游戏
 int op::bet() asm "0x9b0663d8 PUSHINT";    ;; 下注
-int op::start() asm "0x392ab70e PUSHINT";    ;; 启动游戏, 设置游戏状态，停止下注
 int op::crash() asm "0x71bb125e PUSHINT";  ;; 开奖
 int op::settlement() asm "0xbbc88046 PUSHINT"; ;; 游戏结算
 int op::payment() asm "0x1b40800 PUSHINT";  ;; 支付信息
@@ -16,5 +15,3 @@ int op::withdraw() asm "0xcb03bfaf PUSHINT"; ;; 赎回jetton, 从游戏钱包中
 
 ;; GameRecord
 int op::write_record() asm "0x8ca59fb PUSHINT"; ;; 写入记录
-
-;; GameWallet

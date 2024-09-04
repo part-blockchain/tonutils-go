@@ -7,7 +7,8 @@
 #include "errors.fc";
 
 ;; bet 下注
-() bet(int msg_value, int query_id, int round_num, int bet_amount, slice player_address, slice bet_payload_msg, cell game_wallet_code, slice jetton_minter_address, cell jetton_wallet_code) impure {
+() bet(int msg_value, int query_id, int round_num, int bet_amount, slice player_address, slice bet_payload_msg, 
+       cell game_wallet_code, slice jetton_minter_address, cell jetton_wallet_code, cell game_record_code) impure {
     ;; 下注数
     ;; int bet_amount = bet_payload_msg~load_coins();
     ;; throw_unless(76, bet_amount > 0);
@@ -19,7 +20,7 @@
     throw_unless(Bet_Fee_Is_Not_Enough, msg_value >= 2 * base_gas_fee());
     int forward_gas_fee = msg_value - base_gas_fee();
 
-    cell state_init = calculate_game_wallet_state_init(player_address, my_address(), game_wallet_code, jetton_minter_address, jetton_wallet_code);
+    cell state_init = calculate_game_wallet_state_init(player_address, my_address(), game_wallet_code, jetton_minter_address, jetton_wallet_code, game_record_code);
     slice to_game_wallet_address = calculate_game_wallet_address(state_init);
 
     ;; 定义游戏钱包的下注消息
@@ -43,17 +44,19 @@
 }
 
 ;; 向game_record写入一条记录
-() write_record(int query_id, int round_num, int crash_multiple, int player_nums, slice in_msg_body, slice jetton_minter_addr, cell game_record_code, cell jetton_wallet_code) impure {
+() write_record(int query_id, int round_num, int seed, int crash_multiple, int player_nums, slice in_msg_body, 
+                slice jetton_minter_addr, cell game_record_code, cell jetton_wallet_code, cell game_wallet_code) impure {
     int write_record_gas_fee = in_msg_body~load_coins();
 
     ;; 计算game record地址
-    cell state_init = calculate_game_record_state_init(round_num, my_address(), jetton_minter_addr, jetton_wallet_code, game_record_code);
+    cell state_init = calculate_game_record_state_init(round_num, my_address(), jetton_minter_addr, jetton_wallet_code, game_record_code, game_wallet_code);
     slice game_record_addr = calculate_game_record_address(state_init);
 
     cell write_record_msg = begin_cell()
             .store_uint(op::write_record(), 32)
             .store_uint(query_id, 64)
             .store_uint(round_num, 32)
+            .store_uint(seed, 32)
             .store_uint(crash_multiple, 32)
             .store_uint(player_nums, 32)
         .end_cell();
@@ -68,35 +71,13 @@
     send_raw_message(msg.end_cell(), 1);
 }
 
-;; 向game_record转发结算消息
-() settlement(slice game_record_addr, int forward_gas_fee, cell settle_msg) impure {
-    ;; 转发结算消息给GameRecord
-    ;; var settle_msg = begin_cell()
-    ;;         .store_uint(op::settlement(), 32)
-    ;;         .store_uint(query_id, 64)
-    ;;         .store_uint(round_num, 32)
-    ;;         .store_uint(bet_amount, 32)
-    ;;         .store_uint(multiple, 32)
-    ;;         .store_slice(user_game_wallet_addr) ;; 结算地址, 结算到game wallet的jetton钱包
-    ;;     .end_cell();
-
-    var msg = begin_cell()
-        .store_uint(0x18, 6)
-        .store_slice(game_record_addr)
-        .store_coins(forward_gas_fee)
-        .store_uint(1, 1 + 4 + 4 + 64 + 32 + 1 + 1)
-        .store_ref(settle_msg);
-
-    send_raw_message(msg.end_cell(), 1);
-}
-
 ;; withdraw 赎回
 () withdraw(int query_id, int msg_value, slice in_msg_body, slice sender_addr, slice jetton_minter_addr, cell jetton_wallet_code) impure {
     
     int withdraw_amount = in_msg_body~load_coins();    ;; 赎回金额
     slice receive_addr = in_msg_body~load_msg_addr();   ;; token接收者
     ;; 接收者不能是crash game合約地址(自己转给自己无意义)
-    throw_if(74, equal_slices(receive_addr, my_address()));
+    throw_unless(Withdraw_To_Crash_Game_Self, equal_slices(receive_addr, my_address()));
 
     int jetton_forward_gas_fee = jetton_forward_gas_fee();
     int base_gas_fee = base_gas_fee();
@@ -179,58 +160,22 @@
         throw_unless(Error_In_Current_Round, cur_round_num == storage::round_num);
         ;; 添加判断从启动新一轮的开始时间，间隔一定时间，才允许crash
         throw_unless(Crash_Interval_Not_Reached, (now() - storage::start_unix_time) >= storage::min_interval_time);
+        throw_unless(No_Player, storage::player_nums > 0);
         storage::game_state = 1;
         ;; 生成随机数
         randomize_lt();
-        storage::seed = rand(100); ;; 生成一个随机数（0或1）
-        storage::crash_multiple = (9900 / storage::seed); ;; %
+        ;; 从1100到1000000取随机数作为种子seed，crash乘数等于990000除以seed，单位：%。crash乘数范围：[100%, 1000%] 
+        storage::seed = rand(1000000); ;; 生成一个随机数（0到1000000）
+        if(storage::seed < 1100) {
+            storage::seed = storage::seed + 1100;
+        }
+        storage::crash_multiple = 100 + (990000 / storage::seed); ;; %
         ;; 向GameRecord转发游戏记录消息(每轮游戏结果记录保存在一个新地址上)
         ;; 转发write_record消息
-        write_record(query_id, cur_round_num, storage::crash_multiple, storage::player_nums, in_msg_body, storage::jetton_minter_addr, storage::game_record_code, storage::jetton_wallet_code);
+        write_record(query_id, cur_round_num, storage::seed, storage::crash_multiple, storage::player_nums, in_msg_body, 
+                     storage::jetton_minter_addr, storage::game_record_code, storage::jetton_wallet_code, storage::game_wallet_code);
         ;; 保存随机数和结果
         save_storage();
-        return ();
-    } elseif(op == op::settlement()) {
-        ;; 校验手续费是否足够
-        throw_unless(Settlement_Fee_Is_Not_Enough, msg_value >= (jetton_forward_gas_fee() + 4 * base_gas_fee()));
-
-        ;; 获取当前轮数
-        int cur_round_num = in_msg_body~load_uint(32);
-        ;; throw_unless(73, equal_slices(sender_address, admin_addr));
-        ;; 处于游戏结束状态的游戏才能结算
-        throw_unless(Game_Is_Not_End, storage::game_state == 1);
-        throw_unless(Error_In_Current_Round, cur_round_num == storage::round_num);
-
-        ;; 计算GameWallet地址
-        ;; 玩家的下注数
-        int bet_amount = in_msg_body~load_coins();
-        ;; 玩家的乘数
-        int multiple = in_msg_body~load_uint(32);
-        ;; 源头消息发送者
-        slice org_sender_addr = in_msg_body~load_msg_addr();
-        ;; 结算地址
-        slice settle_user_addr = in_msg_body~load_msg_addr();
-        slice user_game_wallet_addr = calculate_user_game_wallet_address(settle_user_addr, my_address(), storage::game_wallet_code, storage::jetton_minter_addr, storage::jetton_wallet_code);
-        ;; 判断消息发送者是否是对应的GameWallet（游戏钱包）地址，只有游戏钱包地址可以转发结算消息到游戏合约中。
-        throw_unless(Sender_Is_Not_Game_Wallet_Addr, equal_slices(sender_address, user_game_wallet_addr));
-        ;; 计算游戏记录地址
-        slice game_record_addr = calculate_user_game_record_address(storage::round_num, my_address(), storage::jetton_minter_addr, storage::jetton_wallet_code, storage::game_record_code); 
-
-        ;; 转发给GameRecord的结算消息
-        var settle_msg = begin_cell()
-                .store_uint(op::settlement(), 32)
-                .store_uint(query_id, 64)
-                .store_uint(storage::round_num, 32)
-                .store_coins(bet_amount)
-                .store_uint(multiple, 32)
-                .store_slice(org_sender_addr) ;; 源头消息发送者，可以不是本game wallet owner发起结算请求，剩余的手续费要还给发起者
-                ;;.store_slice(user_game_wallet_addr) ;; 结算地址, 结算到game wallet的jetton钱包, 并在game wallet中响应tranfer notify消息，处理结算消息结果
-                .store_slice(settle_user_addr) ;; 结算地址, 也是接收jetton token地址
-            .end_cell();
-        ;; 转发消息给GameRecord, 进行判断，游戏玩家的输赢
-        
-        int forward_gas_fee = msg_value - base_gas_fee();
-        settlement(game_record_addr, forward_gas_fee, settle_msg);
         return ();
     } elseif(op == op::payment()) {
         ;; 赔付
@@ -238,7 +183,7 @@
         int forward_fee = jetton_forward_gas_fee();
         int base_fee = base_gas_fee();
         ;; 校验手续费是否足够
-        throw_unless(Payment_Fee_Is_Not_Enough, msg_value >= (forward_fee + 2 * base_fee));
+        throw_unless(Payment_Fee_Is_Not_Enough, msg_value >= (forward_fee + base_fee));
 
         ;; 获取当前轮数
         int cur_round_num = in_msg_body~load_uint(32);
@@ -247,7 +192,8 @@
         throw_unless(Game_Is_Not_End, storage::game_state == 1);
         throw_unless(Error_In_Current_Round, cur_round_num == storage::round_num);
         ;; 计算游戏记录地址
-        slice game_record_addr = calculate_user_game_record_address(storage::round_num, my_address(), storage::jetton_minter_addr, storage::jetton_wallet_code, storage::game_record_code); 
+        slice game_record_addr = calculate_user_game_record_address(storage::round_num, my_address(), storage::jetton_minter_addr, 
+                                                                    storage::jetton_wallet_code, storage::game_record_code, storage::game_wallet_code); 
         ;; 消息发送者必须是游戏记录地址
         throw_unless(Sender_Is_Not_Game_Record_Addr, equal_slices(sender_address, game_record_addr));
 
@@ -264,11 +210,11 @@
         slice settle_user_addr = in_msg_body~load_msg_addr();
         ;; slice user_game_wallet_addr = in_msg_body~load_msg_addr();
         slice user_game_wallet_addr = calculate_user_game_wallet_address(settle_user_addr, my_address(), storage::game_wallet_code, 
-            storage::jetton_minter_addr, storage::jetton_wallet_code);
+                                                                         storage::jetton_minter_addr, storage::jetton_wallet_code, storage::game_record_code);
         ;; 响应transfer notify payload
-        var transfer_notify_payload = begin_cell()
-                .store_uint(op::settlement(), 32)
-            .end_cell();
+        ;; var transfer_notify_payload = begin_cell()
+        ;;         .store_uint(op::settlement(), 32)
+        ;;     .end_cell();
         ;; 转账jetton给用户的结算地址
         var transfer_msg = begin_cell()
                 .store_uint(op::transfer(), 32)
@@ -279,14 +225,15 @@
                 .store_slice(settle_user_addr) ;; to address, 接收token
                 .store_slice(user_game_wallet_addr)  ;; reponse address, 用于处理excesses事件，重置用户的游戏数据
                 .store_maybe_ref(emptyCell)
-                .store_coins(forward_fee)                ;; forward_amount
-                .store_maybe_ref(transfer_notify_payload)
+                .store_coins(base_fee)                ;; forward_amount
+                ;; .store_maybe_ref(transfer_notify_payload)
+                .store_maybe_ref(emptyCell)  
             .end_cell();
 
         var msg = begin_cell()
             .store_uint(0x18, 6)
             .store_slice(crash_game_jetton_wallet_addr)
-            .store_coins(forward_fee + base_fee)   ;; ton_amount
+            .store_coins(forward_fee)   ;; ton_amount
             .store_uint(4 + 2 + 1, 1 + 4 + 4 + 64 + 32 + 1 + 1 + 1)
             .store_ref(state_init)
             .store_ref(transfer_msg);     ;; 转账jetton token消息
@@ -331,7 +278,7 @@
             slice player_address = from_user;
             ;; 向玩家的GameWallet地址转发bet消息
             bet(msg_value, query_id, storage::round_num, jetton_amount, player_address, payload_msg, storage::game_wallet_code, 
-                storage::jetton_minter_addr, storage::jetton_wallet_code);
+                storage::jetton_minter_addr, storage::jetton_wallet_code, storage::game_record_code);
 
             ;; 统计此轮参与游戏的玩家人数
             storage::player_nums += 1;
@@ -358,7 +305,8 @@
 (slice) get_user_game_wallet_addr(slice owner_addr) method_id {
     load_storage();
 
-    slice user_game_wallet_addr = calculate_user_game_wallet_address(owner_addr, my_address(), storage::game_wallet_code, storage::jetton_minter_addr, storage::jetton_wallet_code);
+    slice user_game_wallet_addr = calculate_user_game_wallet_address(owner_addr, my_address(), storage::game_wallet_code, 
+                                                                     storage::jetton_minter_addr, storage::jetton_wallet_code, storage::game_record_code);
     
     return user_game_wallet_addr;
 }
@@ -367,8 +315,8 @@
 (slice) get_game_record_addr(int input_round_num) method_id {
     load_storage();
 
-    slice game_record_addr = 
-        calculate_user_game_record_address(input_round_num, my_address(), storage::jetton_minter_addr, storage::jetton_wallet_code, storage::game_record_code);
+    slice game_record_addr = calculate_user_game_record_address(input_round_num, my_address(), storage::jetton_minter_addr, 
+                                                                storage::jetton_wallet_code, storage::game_record_code, storage::game_wallet_code);
      
     return game_record_addr;
 }

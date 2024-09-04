@@ -14,6 +14,7 @@ Crash Game合约操作：
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"log"
@@ -55,7 +56,9 @@ func CrashGameOperation() {
 		case 0:
 			err = DeployCrashGame(*jettonMinterAddr, *jettonWalletCodeFile, *gameWalletCodeFile, *gameRecordCodeFile, *crashGameCodeFile)
 		case 1:
-			err, _ = GetCrashGameData(*crashGameAddr, *showCode)
+			_, data := GetCrashGameData(*crashGameAddr, *showCode)
+			byData, _ := json.MarshalIndent(data, "", "    ")
+			log.Printf("crash game data:\n%v\n", string(byData))
 		case 2:
 			err = NewRound(*crashGameAddr)
 		case 3:

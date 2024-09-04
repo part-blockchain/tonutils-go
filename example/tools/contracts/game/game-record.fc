@@ -2,33 +2,38 @@
 #include "op-codes.fc";
 #include "gas.fc";
 #include "errors.fc";
+#include "game-utils.fc";
 
 ;; load_data populates storage variables using stored data
-(int, int, int, int, slice, slice, cell) load_data() impure {
+(int, int, int, int, int, slice, slice, cell, cell) load_data() impure {
     slice ds = get_data().begin_parse();
     return (ds~load_uint(32), ;; 轮数
+            ds~load_uint(32), ;; 随机数种子
             ds~load_uint(32), ;; Crash乘数
             ds~load_uint(32), ;; 游戏状态: 0-bet, 1-进行中, 2-游戏结束/未启动
             ds~load_uint(32), ;; 玩家数量
             ;; ds~load_uint(32), ;; 已结算玩家数量
             ds~load_msg_addr(), ;; crash_game_addr
             ds~load_msg_addr(), ;; jetton_minter_addr
-            ds~load_ref()  ;; jetton_wallet_code
+            ds~load_ref(),  ;; jetton_wallet_code
+            ds~load_ref()  ;; game_wallet_code
     );
 }
 
 ;; save_data stores storage variables as a cell into persistent storage
-() save_data(int round_num, int crash_multiple, int game_state, int player_nums, slice crash_game_addr, slice jetton_minter_addr,
-             cell jetton_wallet_code) impure {
+() save_data(int round_num, int seed, int crash_multiple, int game_state, int player_nums, slice crash_game_addr, slice jetton_minter_addr,
+             cell jetton_wallet_code, cell game_wallet_code) impure {
     set_data(
         begin_cell()
             .store_uint(round_num, 32)
+            .store_uint(seed, 32)
             .store_uint(crash_multiple, 32)
             .store_uint(game_state, 32)
             .store_uint(player_nums, 32)
             .store_slice(crash_game_addr)
             .store_slice(jetton_minter_addr)
             .store_ref(jetton_wallet_code)
+            .store_ref(game_wallet_code)
         .end_cell()
     );
 }
@@ -61,7 +66,8 @@
     int op = in_msg_body~load_uint(32); ;; by convention, the first 32 bits of incoming message is the op
     int query_id = in_msg_body~load_uint(64); ;; also by convention, the next 64 bits contain the "query id", although this is not always the case
     
-    (int round_num, int crash_multiple, int game_state, int player_nums, slice crash_game_addr, slice jetton_minter_addr, cell jetton_wallet_code) = load_data(); ;; here we populate the storage variables
+    (int round_num, int seed, int crash_multiple, int game_state, int player_nums, slice crash_game_addr, 
+     slice jetton_minter_addr, cell jetton_wallet_code, cell game_wallet_code) = load_data(); ;; here we populate the storage variables
 
     ;; 获取当前轮数
     int cur_round_num = in_msg_body~load_uint(32);
@@ -71,6 +77,7 @@
         throw_unless(Error_In_Current_Round, cur_round_num == round_num);
         throw_unless(Game_Is_Not_Start, game_state == 0);
 
+        seed = in_msg_body~load_uint(32);
         crash_multiple = in_msg_body~load_uint(32);
         throw_unless(Crash_Multiple_Error, crash_multiple > 0);
 
@@ -78,18 +85,18 @@
         player_nums = in_msg_body~load_uint(32);
 
         ;; 保存状态
-        save_data(round_num, crash_multiple, 1, player_nums, crash_game_addr, jetton_minter_addr, jetton_wallet_code);
+        save_data(round_num, seed, crash_multiple, 1, player_nums, crash_game_addr, jetton_minter_addr, jetton_wallet_code, game_wallet_code);
         
         return ();
     } elseif(op == op::settlement()) {
         int forward_fee = jetton_forward_gas_fee();
         int base_fee = base_gas_fee();
         ;; 校验手续费是否足够
-        throw_unless(Game_Record_Settlement_Fee_Is_Not_Enough, msg_value >= (forward_fee + 3 * base_fee));
+        throw_unless(Game_Record_Settlement_Fee_Is_Not_Enough, msg_value >= (forward_fee + 2 * base_fee));
 
         throw_unless(Error_In_Current_Round, cur_round_num == round_num);
-        ;; crash_game_addr才有转发结算消息
-        throw_unless(Sender_Is_Not_Crash_Game_Addr, equal_slices(sender_address, crash_game_addr));
+        ;; ;; crash_game_addr才有转发结算消息
+        ;; throw_unless(Sender_Is_Not_Crash_Game_Addr, equal_slices(sender_address, crash_game_addr));
         ;; 游戏结束才允许结算
         throw_unless(Game_Is_Not_End, game_state == 1);
 
@@ -107,6 +114,12 @@
         ;; slice user_game_wallet_addr = in_msg_body~load_msg_addr(); 
         ;; 结算地址，接收token地址
         slice settle_user_addr = in_msg_body~load_msg_addr();
+
+        slice user_game_wallet_addr = calculate_user_game_wallet_address(settle_user_addr, crash_game_addr, game_wallet_code, 
+                                                                         jetton_minter_addr, jetton_wallet_code, my_code());
+
+        ;; 结算地址的game wallet地址才允许转发结算消息到game record
+        throw_unless(Sender_Is_Not_Game_Wallet_Addr, equal_slices(sender_address, user_game_wallet_addr));
         
         ;; 结算公式
         int profit = muldiv(bet_amount, multiple, 100); ;; multiple帶%
@@ -141,6 +154,6 @@
 
 
 ;; 获取记录
-(int, int, int, int, slice, slice, cell) get_info() method_id {
+(int, int, int, int, int, slice, slice, cell, cell) get_info() method_id {
     return load_data();
 }
