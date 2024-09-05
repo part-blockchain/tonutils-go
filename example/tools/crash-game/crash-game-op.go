@@ -68,6 +68,8 @@ func CrashGameOperation() {
 			err, _ = GetGameRecordInfo(*crashGameAddr, *roundNum, *showCode)
 		case 7:
 			err = Settlement(*playerWalletIndex, *crashGameAddr, *settleAddr, *roundNum)
+		case 8:
+			err = GetPlayerInfo(*playerWalletIndex, *crashGameAddr, *playerAddr, *showCode)
 		default:
 			// do nothing
 			err = errors.New("invalid crash game operation type")

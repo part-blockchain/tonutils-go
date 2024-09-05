@@ -650,3 +650,83 @@ func Settlement(playerWalletIndex int, crashGameAddr, settleAddr string, roundNu
 	log.Printf(GetScanCfg()+"transaction/%s\n", txHash)
 	return nil
 }
+
+func getJettonWalletInfo(jettonMinterAddr, ownerAddr string) (error, *CrashGame.JettonWalletInfo) {
+	// 获取jetton minter client对象
+	err, pCtx, master := newJettonMasterClient(jettonMinterAddr)
+	if err != nil || nil == master || nil == pCtx {
+		return errors.New("new jetton master client failed"), nil
+	}
+	// 获取jetton minter信息
+	tokenWallet, err := master.GetJettonWallet(*pCtx, address.MustParseAddr(ownerAddr))
+	if err != nil || tokenWallet == nil {
+		errMsg := "get jetton wallet failed."
+		log.Fatal(errMsg)
+	}
+
+	// 查询jetton余额
+	tokenBalance, err := tokenWallet.GetBalance(*pCtx)
+	if err != nil {
+		errMsg := fmt.Sprintf("get jetton wallet balance failed: %s", err.Error())
+		log.Fatal(errMsg)
+	}
+	jettonWalletInfo := &CrashGame.JettonWalletInfo{
+		JettonMinterAddr: address.MustParseAddr(jettonMinterAddr),
+		JettonWalletAddr: tokenWallet.Address(),
+		Balance:          tokenBalance,
+	}
+
+	return nil, jettonWalletInfo
+}
+
+// GetPlayerInfo 获取玩家记录信息
+func GetPlayerInfo(playerWalletIndex int, crashGameAddr, playerAddr string, showCode bool) error {
+	cfg, w := prepareBaseEnv(playerWalletIndex)
+	// 玩家地址
+	if playerAddr == "" {
+		playerAddr = w.WalletAddress().String()
+	}
+	if "" == crashGameAddr {
+		crashGameAddr = cfg.CrashGameCfg.ContractAddr
+	}
+	playerInfo := CrashGame.PlayerInfo{}
+	// 玩家地址
+	playerInfo.PlayerAddr = address.MustParseAddr(playerAddr)
+	// 获取crash game合约的jetton wallet信息
+	err, jettonWalletInfo := getJettonWalletInfo(cfg.Jetton.JettonMinterAddr, playerAddr)
+	jettonDecimals, _ := strconv.Atoi(cfg.Jetton.MetaData.Decimals)
+	playerInfo.JettonWalletInfo.JettonMinterAddr = jettonWalletInfo.JettonMinterAddr
+	playerInfo.JettonWalletInfo.JettonWalletAddr = jettonWalletInfo.JettonWalletAddr
+	playerInfo.JettonWalletInfo.Balance = tlb.MustFromNano(jettonWalletInfo.Balance, jettonDecimals).Val()
+	log.Printf("crash game address:%s, player address:%s\n", crashGameAddr, playerAddr)
+
+	err, ctx, crashGame := newCrashGameClient(crashGameAddr)
+	if err != nil || nil == crashGame || nil == ctx {
+		return errors.New("new crash game client failed")
+	}
+	// 获取玩家的游戏钱包地址
+	gameWalletAddr, err := crashGame.GetUserGameWalletAddr(*ctx, address.MustParseAddr(playerAddr))
+	if err != nil || nil == gameWalletAddr {
+		return errors.New("get user game wallet address failed")
+	}
+	// game wallet address
+	playerInfo.GameWalletInfo.ContractAddr = gameWalletAddr
+
+	// 构造game wallet合约客户端
+	err, ctx, gameWalletClient := newGameWalletClient(gameWalletAddr)
+	if err != nil || nil == crashGame || nil == ctx {
+		return errors.New("new game wallet client failed")
+	}
+
+	// 获取game wallet信息
+	data, err := gameWalletClient.GetGameWalletData(*ctx, showCode)
+	if err != nil || nil == data {
+		errMsg := fmt.Sprintf("get game wallet data failed: %s", err.Error())
+		return errors.New(errMsg)
+	}
+	playerInfo.GameWalletInfo.Data = data
+	// json格式化输出
+	byData, _ := json.MarshalIndent(playerInfo, "", "    ")
+	log.Printf("game wallet data:\n%v\n", string(byData))
+	return nil
+}

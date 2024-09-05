@@ -37,6 +37,20 @@ type CrashGameInfo struct {
 	GameRecordInfo   GameRecordInfo   // GameRecord合约信息
 }
 
+// GameWalletInfo GameWallet合约信息
+type GameWalletInfo struct {
+	ContractAddr *address.Address // GameWallet合约地址
+	// JettonWalletInfo JettonWalletInfo // GameWallet的JettonWallet合约信息, 游戏过程的token不经过GameWallet合约
+	Data *GameWalletData // GameWallet合约数据
+}
+
+// PlayerInfo 玩家信息
+type PlayerInfo struct {
+	PlayerAddr       *address.Address // 玩家地址
+	JettonWalletInfo JettonWalletInfo // JettonWallet合约信息
+	GameWalletInfo   GameWalletInfo   // GameWallet合约信息
+}
+
 // Data crash game合约存储数据
 type Data struct {
 	RoundNum         uint64           //  游戏轮数
