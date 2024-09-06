@@ -1,11 +1,8 @@
-global int storage::round_num;
-global int storage::game_state;
-global int storage::seed;
-global int storage::crash_multiple;
-global int storage::player_nums;
-global int storage::start_unix_time;
-global int storage::start_tx_time;
-global int storage::start_blk_time;
+global cell storage::dict_game_infos;   ;; 每轮的游戏信息
+
+global int storage::current_round_index;  ;; 当前轮索引, 用于遍历可用的轮数
+global int storage::current_round_num;    ;; 当前轮数, 用于统计游戏的总轮数
+global int storage::max_rounds_parallel; ;; 最大并行游戏轮数
 global int storage::min_interval_time;
 global slice storage::admin_addr;
 global slice storage::jetton_minter_addr;
@@ -15,15 +12,11 @@ global cell storage::game_record_code;
 
 () load_storage() impure inline {
     slice ds = get_data().begin_parse();
-
-    storage::round_num = ds~load_uint(32); ;; 轮数
-    storage::game_state = ds~load_uint(32); ;; 游戏状态: 0-bet; 1-游戏结束/未启动
-    storage::seed = ds~load_uint(32); ;; 随机数种子
-    storage::crash_multiple = ds~load_uint(32); ;; Crash乘数
-    storage::player_nums = ds~load_uint(32); ;; 玩家数量
-    storage::start_unix_time = ds~load_uint(32); ;; 开始unix时间
-    storage::start_tx_time = ds~load_uint(64); ;; 开始交易时间
-    storage::start_blk_time = ds~load_uint(64); ;; 开始区块时间
+    storage::dict_game_infos = ds~load_dict(); ;; 每轮游戏信息
+    
+    storage::current_round_index = ds~load_uint(32); ;; 当前轮索引
+    storage::current_round_num = ds~load_uint(32); ;; 当前游戏轮数
+    storage::max_rounds_parallel = ds~load_uint(32); ;; 最大并行游戏轮数
     storage::min_interval_time = ds~load_uint(32); ;; 一轮游戏从创建完成到crash的最小时间间隔(s)
     storage::admin_addr = ds~load_msg_addr(); ;; admin_addr
     storage::jetton_minter_addr = ds~load_msg_addr(); ;; jetton_minter_addr
@@ -34,19 +27,16 @@ global cell storage::game_record_code;
 
 () save_storage() impure inline {
     set_data(begin_cell()
-        .store_uint(storage::round_num, 32)
-        .store_uint(storage::game_state, 32)
-        .store_uint(storage::seed, 32)
-        .store_uint(storage::crash_multiple, 32)
-        .store_uint(storage::player_nums, 32)
-        .store_uint(storage::start_unix_time, 32)
-        .store_uint(storage::start_tx_time, 64)
-        .store_uint(storage::start_blk_time, 64)
+        .store_dict(storage::dict_game_infos)
+        .store_uint(storage::current_round_index, 32)
+        .store_uint(storage::current_round_num, 32)
+        .store_uint(storage::max_rounds_parallel, 32)
         .store_uint(storage::min_interval_time, 32)
         .store_slice(storage::admin_addr)
         .store_slice(storage::jetton_minter_addr)
         .store_ref(storage::jetton_wallet_code)
         .store_ref(storage::game_wallet_code)
         .store_ref(storage::game_record_code)
+        
     .end_cell());
 }

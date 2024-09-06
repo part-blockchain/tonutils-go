@@ -13,6 +13,7 @@ import (
 	"github.com/xssnick/tonutils-go/tvm/cell"
 	"io/ioutil"
 	"log"
+	"math/big"
 	"os"
 	"strconv"
 	"time"
@@ -125,37 +126,64 @@ func getGameRecordCode(jettonWalletCodeFilePath string) *cell.Cell {
 	return codeCell
 }
 
+func initCrashGameData(maxRoundsParallel uint64) *cell.Dictionary {
+	dictGameInfos := cell.NewDict(256)
+	for i := 0; i < int(maxRoundsParallel); i++ {
+		k := big.NewInt(int64(i))
+		gameInfo := &CrashGame.GameInfoPeerRound{
+			RoundIndex:    uint64(i),     // 游戏轮数索引
+			RoundNum:      uint64(i + 1), // 游戏轮数
+			GameState:     1,             // 游戏状态: 0-bet; 1-游戏结束/未启动
+			Seed:          0,             // 随机数种子
+			CrashMultiple: 0,             // Crash乘数, 即爆炸倍数, 单位:%
+			PlayerNums:    0,             // 玩家数量
+			StartUnixTime: 0,             // 游戏开始时间(unix)
+			StartTxTime:   0,             // 游戏开始交易时间(unix)
+			StartBlkTime:  0,             // 游戏开始区块时间(unix)
+		}
+		v := cell.BeginCell().
+			MustStoreUInt(gameInfo.RoundIndex, 32).
+			MustStoreUInt(gameInfo.RoundNum, 32).
+			MustStoreUInt(gameInfo.GameState, 32).
+			MustStoreUInt(gameInfo.Seed, 32).
+			MustStoreUInt(gameInfo.CrashMultiple, 32).
+			MustStoreUInt(gameInfo.PlayerNums, 32).
+			MustStoreUInt(gameInfo.StartUnixTime, 32).
+			MustStoreUInt(gameInfo.StartTxTime, 64).
+			MustStoreUInt(gameInfo.StartBlkTime, 64).
+			EndCell()
+
+		err := dictGameInfos.SetIntKey(k, v)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	log.Printf("init crash game peer round hash:%v\n", hex.EncodeToString(dictGameInfos.AsCell().Hash()))
+	return dictGameInfos
+}
+
 // getDeployCrashGameData 获取部署CrashGame的data
-func getDeployCrashGameData(jettonMinterAddr *address.Address, adminAddr *address.Address,
+func getDeployCrashGameData(jettonMinterAddr, adminAddr *address.Address, maxRoundsParallel, minIntervalTime uint64,
 	jettonWalletCode *cell.Cell, gameWalletCode *cell.Cell, gameRecordCode *cell.Cell) (_ *cell.Cell, err error) {
 
 	// 部署合约初始化数据
 	initData := &CrashGame.Data{
-		RoundNum:         0,                //  游戏轮数
-		GameState:        1,                //  游戏状态: 0-bet; 1-游戏结束/未启动
-		Seed:             0,                //  随机数种子
-		CrashMultiple:    0,                // Crash乘数, 即爆炸倍数, 单位:%
-		PlayerNums:       0,                // 玩家数量
-		StartUnixTime:    0,                // 游戏开始时间(unix)
-		StartTxTime:      0,                // 游戏开始交易时间(unix)
-		StartBlkTime:     0,                // 游戏开始区块时间(unix)
-		MinIntervalTime:  0,                //  一轮游戏从创建完成到crash的最小时间间隔,单位秒
-		AdminAddr:        adminAddr,        //  管理员地址
-		JettonMinterAddr: jettonMinterAddr, //  JettonMinter合约地址
-		JettonWalletCode: jettonWalletCode, //  JettonWallet合约代码
-		GameWalletCode:   gameWalletCode,   //  GameWallet合约代码
-		GameRecordCode:   gameRecordCode,   //  GameRecord合约代码
+		CurrentRoundIndex: 0,                 // 当前轮索引, 用于遍历可用的轮数
+		CurrentRoundNum:   0,                 // 当前轮数, 用于统计游戏的总轮数
+		MaxRoundsParallel: maxRoundsParallel, //  最大并行游戏轮数
+		MinIntervalTime:   minIntervalTime,   //  一轮游戏从创建完成到crash的最小时间间隔,单位秒
+		AdminAddr:         adminAddr,         //  管理员地址
+		JettonMinterAddr:  jettonMinterAddr,  //  JettonMinter合约地址
+		JettonWalletCode:  jettonWalletCode,  //  JettonWallet合约代码
+		GameWalletCode:    gameWalletCode,    //  GameWallet合约代码
+		GameRecordCode:    gameRecordCode,    //  GameRecord合约代码
 	}
 
 	data := cell.BeginCell().
-		MustStoreUInt(initData.RoundNum, 32).
-		MustStoreUInt(initData.GameState, 32).
-		MustStoreUInt(initData.Seed, 32).
-		MustStoreUInt(initData.CrashMultiple, 32).
-		MustStoreUInt(initData.PlayerNums, 32).
-		MustStoreUInt(initData.StartUnixTime, 32).
-		MustStoreUInt(initData.StartTxTime, 64).
-		MustStoreUInt(initData.StartBlkTime, 64).
+		MustStoreDict(initCrashGameData(maxRoundsParallel)).
+		MustStoreUInt(initData.CurrentRoundIndex, 32).
+		MustStoreUInt(initData.CurrentRoundNum, 32).
+		MustStoreUInt(initData.MaxRoundsParallel, 32).
 		MustStoreUInt(initData.MinIntervalTime, 32).
 		MustStoreAddr(initData.AdminAddr).
 		MustStoreAddr(initData.JettonMinterAddr).
@@ -240,6 +268,7 @@ func DeployCrashGame(jettonMinterAddr, jettonWalletCodeFile, gameWalletCodeFile,
 	log.Println("Deploy wallet:", w.WalletAddress().String())
 	// 生成部署合约数据（初始化合约数据）
 	deployData, err := getDeployCrashGameData(address.MustParseAddr(jettonMinterAddr), w.WalletAddress(),
+		cfg.CrashGameCfg.MaxRoundsParallel, cfg.CrashGameCfg.MinIntervalTime,
 		getContractCode(jettonWalletCodeFile, "jetton-wallet"), getContractCode(gameWalletCodeFile, "game-wallet"),
 		getContractCode(gameRecordCodeFile, "game-record"))
 
@@ -271,6 +300,37 @@ func DeployCrashGame(jettonMinterAddr, jettonWalletCodeFile, gameWalletCodeFile,
 	return nil
 }
 
+func parseGameInfoCell(cellGameInfos *cell.Cell, maxRoundsParallel uint64) []CrashGame.GameInfoPeerRound {
+	dictGameInfos, err := cellGameInfos.BeginParse().ToDict(256)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// 遍历游戏信息
+	var gameInfos []CrashGame.GameInfoPeerRound
+	for i := 0; i < int(maxRoundsParallel); i++ {
+		gameInfo := CrashGame.GameInfoPeerRound{}
+		k := big.NewInt(int64(i))
+		// 获取key1对应的value
+		lv, err := dictGameInfos.LoadValueByIntKey(k)
+		if err != nil {
+			log.Fatal(err)
+		}
+		// 获取value中的数据
+		sl := lv.MustToCell().BeginParse()
+		gameInfo.RoundIndex = sl.MustLoadUInt(32)    //  游戏轮数索引
+		gameInfo.RoundNum = sl.MustLoadUInt(32)      //  游戏轮数
+		gameInfo.GameState = sl.MustLoadUInt(32)     //  游戏状态: 0-bet; 1-游戏结束/未启动
+		gameInfo.Seed = sl.MustLoadUInt(32)          //  随机数种子
+		gameInfo.CrashMultiple = sl.MustLoadUInt(32) // Crash乘数, 即爆炸倍数, 单位:%
+		gameInfo.PlayerNums = sl.MustLoadUInt(32)    // 玩家数量
+		gameInfo.StartUnixTime = sl.MustLoadUInt(32) // 游戏开始时间(unix)
+		gameInfo.StartTxTime = sl.MustLoadUInt(64)   // 游戏开始交易时间(unix)
+		gameInfo.StartBlkTime = sl.MustLoadUInt(64)  // 游戏开始区块时间(unix)
+		gameInfos = append(gameInfos, gameInfo)
+	}
+	return gameInfos
+}
+
 // GetCrashGameInfo 获取CrashGame信息
 func GetCrashGameInfo(crashGameAddr string, showCode bool) (error, *CrashGame.CrashGameInfo) {
 	// read from config file
@@ -291,9 +351,9 @@ func GetCrashGameInfo(crashGameAddr string, showCode bool) (error, *CrashGame.Cr
 	// 获取合约数据
 	data, err := crashGame.GetCrashGameData(*ctx, showCode)
 	if err != nil || nil == data {
-		errMsg := "get crash game data failed"
-		log.Fatal(errMsg)
+		log.Fatal(err)
 	}
+
 	// CrashGame合约数据
 	info.Data = data
 	info.JettonWalletInfo.JettonMinterAddr = address.MustParseAddr(cfg.Jetton.JettonMinterAddr)
@@ -322,20 +382,36 @@ func GetCrashGameInfo(crashGameAddr string, showCode bool) (error, *CrashGame.Cr
 	info.JettonWalletInfo.JettonWalletAddr = tokenWallet.Address()
 	info.JettonWalletInfo.Balance = coinBalance.Val()
 
-	// 获取游戏记录地址
-	gameRecordAddr, err := crashGame.GetGameRecordAddr(*pCtx, data.RoundNum)
-	if err != nil || nil == gameRecordAddr {
-		errMsg := fmt.Sprintf("get game record address failed: %s", err.Error())
-		return errors.New(errMsg), nil
-	}
-	info.GameRecordInfo.ContractAddr = gameRecordAddr
-	err, recordData := GetGameRecordInfo(crashGameAddr, data.RoundNum, showCode)
-	if err != nil || recordData == nil {
-		//errMsg := fmt.Sprintf("get game record info failed: %s", err.Error())
-		//log.Fatal(errMsg)
+	// 获取crash game合约的每一轮游戏信息
+	if data.CellGameInfos != nil {
+		// 解析游戏信息
+		gameInfos := parseGameInfoCell(data.CellGameInfos, data.MaxRoundsParallel)
+		//byGameInfos, _ := json.Marshal(gameInfos)
+		byGameInfos, _ := json.MarshalIndent(gameInfos, "", "    ")
+		log.Println("gameInfos:\n", string(byGameInfos))
+
+		// 获取游戏记录地址
+		for _, gameInfo := range gameInfos {
+			gameRecordAddr, err := crashGame.GetGameRecordAddr(*pCtx, gameInfo.RoundIndex)
+			if err != nil || nil == gameRecordAddr {
+				errMsg := fmt.Sprintf("get game record address failed: %s", err.Error())
+				return errors.New(errMsg), nil
+			}
+			gameRecordInfo := CrashGame.GameRecordInfo{
+				ContractAddr: gameRecordAddr,
+			}
+
+			err, recordData := GetGameRecordInfo(crashGameAddr, gameInfo.RoundIndex, showCode)
+			if err != nil || recordData == nil {
+				//errMsg := fmt.Sprintf("get game record info failed: %s", err.Error())
+				//log.Fatal(errMsg)
+			}
+			gameRecordInfo.Data = recordData
+			info.GameRecordInfos = append(info.GameRecordInfos, gameRecordInfo)
+		}
+
 	}
 
-	info.GameRecordInfo.Data = recordData
 	// json格式化输出
 	byData, _ := json.MarshalIndent(info, "", "    ")
 	log.Printf("crash game info:\n%v\n", string(byData))
@@ -464,7 +540,7 @@ func Bet(playerWalletIndex int, crashGameAddr, betAmount string, betMultiple uin
 	// 下注的payload:组装转账的payload转发消息, 在crash-game合约的transfer_notification中处理下注信息
 	betPayload := cell.BeginCell().
 		MustStoreUInt(OpBet, 32).
-		MustStoreUInt(data.RoundNum, 32).
+		// MustStoreUInt(data.RoundNum, 32).
 		MustStoreUInt(betMultiple, 32).
 		EndCell()
 
@@ -554,14 +630,14 @@ func Crash(crashGameAddr string, roundNum uint64) error {
 }
 
 // GetGameRecordInfo 获取游戏记录信息
-func GetGameRecordInfo(crashGameAddr string, roundNum uint64, showCode bool) (error, *CrashGame.GameRecordData) {
+func GetGameRecordInfo(crashGameAddr string, roundIndex uint64, showCode bool) (error, *CrashGame.GameRecordData) {
 	cfg, _ := prepareBaseEnv(-1)
 	if "" == crashGameAddr {
 		crashGameAddr = cfg.CrashGameCfg.ContractAddr
 	}
-	if 0 == roundNum {
-		roundNum = cfg.CrashGameCfg.RoundNum
-	}
+	//if 0 == roundIndex {
+	//	roundIndex = cfg.CrashGameCfg.RoundNum
+	//}
 	// 获取crash game client对象
 	err, pCtx, crashGame := newCrashGameClient(crashGameAddr)
 	if err != nil || nil == crashGame || nil == pCtx {
@@ -570,7 +646,7 @@ func GetGameRecordInfo(crashGameAddr string, roundNum uint64, showCode bool) (er
 	}
 
 	// 获取游戏记录地址
-	gameRecordAddr, err := crashGame.GetGameRecordAddr(*pCtx, roundNum)
+	gameRecordAddr, err := crashGame.GetGameRecordAddr(*pCtx, roundIndex)
 	if err != nil || nil == gameRecordAddr {
 		errMsg := fmt.Sprintf("get game record address failed: %s", err.Error())
 		return errors.New(errMsg), nil

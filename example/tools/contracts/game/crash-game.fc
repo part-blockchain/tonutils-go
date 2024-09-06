@@ -135,158 +135,172 @@
     
     load_storage();
     if(op == op::new_round()) {
-        ;; 谁都可以启动新的一轮游戏
-        ;; throw_unless(73, equal_slices(sender_address, admin_addr));
-        ;; 游戏结束之后才能启动新的一轮游戏
-        throw_unless(Game_Is_Not_End, storage::game_state == 1);
-        ;;  新的一轮游戏
-        storage::round_num = storage::round_num + 1;
-        ;; 指定结算币种(暂时不可修改，因为涉及到玩家的游戏钱包地址会发生变化)：jetton_minter_addr, jetton_wallet_code, game_wallet_code, game_record_code
-        storage::start_unix_time = now();        ;; unix时间
-        ;; storage::start_tx_time = cur_lt();   ;; 交易逻辑时间
-        ;; storage::start_blk_time = block_lt(); ;; 区块逻辑时间
-        storage::game_state = 0;
-        storage::seed = 0;
-        storage::crash_multiple = 0;
-        storage::player_nums = 0;
+        int key = 0;
+        (cell game_info_peer_round, _) = storage::dict_game_infos.udict_get_ref?(256, key);
+        slice ds = game_info_peer_round.begin_parse();
+        throw_unless(888, ds~load_uint(32) == 0);
+
+        game_info_peer_round = begin_cell()
+                .store_uint(100, 32)
+            .end_cell();
+        ;; 设置值
+        var updateCell = begin_cell()
+                .store_uint(100, 32)
+            .end_cell();
+
+        storage::dict_game_infos~udict_delete?(256, key);
+        storage::dict_game_infos~udict_set_ref(256, key, updateCell);
+
+        ;; ;; 游戏结束之后才能启动新的一轮游戏
+        ;; throw_unless(Game_Is_Not_End, storage::game_state == 1);
+        ;; ;;  新的一轮游戏
+        ;; storage::round_num = storage::round_num + 1;
+        ;; ;; 指定结算币种(暂时不可修改，因为涉及到玩家的游戏钱包地址会发生变化)：jetton_minter_addr, jetton_wallet_code, game_wallet_code, game_record_code
+        ;; storage::start_unix_time = now();        ;; unix时间
+        ;; ;; storage::start_tx_time = cur_lt();   ;; 交易逻辑时间
+        ;; ;; storage::start_blk_time = block_lt(); ;; 区块逻辑时间
+        ;; storage::game_state = 0;
+        ;; storage::seed = 0;
+        ;; storage::crash_multiple = 0;
+        ;; storage::player_nums = 0;
         save_storage();
         return ();
     } elseif(op == op::crash()) {
-        ;; 获取当前轮数
-        int cur_round_num = in_msg_body~load_uint(32);
-        ;; throw_unless(73, equal_slices(sender_address, admin_addr));
-        ;; 处于游戏过程状态的游戏才能crash
-        throw_unless(Game_Is_Not_Start, storage::game_state == 0);
-        throw_unless(Error_In_Current_Round, cur_round_num == storage::round_num);
-        ;; 添加判断从启动新一轮的开始时间，间隔一定时间，才允许crash
-        throw_unless(Crash_Interval_Not_Reached, (now() - storage::start_unix_time) >= storage::min_interval_time);
-        throw_unless(No_Player, storage::player_nums > 0);
-        storage::game_state = 1;
-        ;; 生成随机数
-        randomize_lt();
-        ;; 从1100到1000000取随机数作为种子seed，crash乘数等于990000除以seed，单位：%。crash乘数范围：[100%, 1100%] 
-        storage::seed = rand(100000); ;; 生成一个随机数（0到1000000）
-        if(storage::seed < 1100) {
-            storage::seed = storage::seed + 1100;
-        }
-        storage::crash_multiple = 100 + (990000 / storage::seed); ;; %
-        ;; 向GameRecord转发游戏记录消息(每轮游戏结果记录保存在一个新地址上)
-        ;; 转发write_record消息
-        write_record(query_id, cur_round_num, storage::seed, storage::crash_multiple, storage::player_nums, in_msg_body, 
-                     storage::jetton_minter_addr, storage::game_record_code, storage::jetton_wallet_code, storage::game_wallet_code);
-        ;; 保存随机数和结果
-        save_storage();
+        ;; ;; 获取当前轮数
+        ;; int cur_round_num = in_msg_body~load_uint(32);
+        ;; ;; throw_unless(73, equal_slices(sender_address, admin_addr));
+        ;; ;; 处于游戏过程状态的游戏才能crash
+        ;; throw_unless(Game_Is_Not_Start, storage::game_state == 0);
+        ;; throw_unless(Error_In_Current_Round, cur_round_num == storage::round_num);
+        ;; ;; 添加判断从启动新一轮的开始时间，间隔一定时间，才允许crash
+        ;; throw_unless(Crash_Interval_Not_Reached, (now() - storage::start_unix_time) >= storage::min_interval_time);
+        ;; throw_unless(No_Player, storage::player_nums > 0);
+        ;; storage::game_state = 1;
+        ;; ;; 生成随机数
+        ;; randomize_lt();
+        ;; ;; 从1100到1000000取随机数作为种子seed，crash乘数等于990000除以seed，单位：%。crash乘数范围：[110%, 1000%] 
+        ;; storage::seed = rand(100000); ;; 生成一个随机数（0到1000000）
+        ;; if(storage::seed < 1100) {
+        ;;     storage::seed = storage::seed + 1100;
+        ;; }
+        ;; storage::crash_multiple = 100 + (990000 / storage::seed); ;; %
+        ;; ;; 向GameRecord转发游戏记录消息(每轮游戏结果记录保存在一个新地址上)
+        ;; ;; 转发write_record消息
+        ;; write_record(query_id, cur_round_num, storage::seed, storage::crash_multiple, storage::player_nums, in_msg_body, 
+        ;;              storage::jetton_minter_addr, storage::game_record_code, storage::jetton_wallet_code, storage::game_wallet_code);
+        ;; ;; 保存随机数和结果
+        ;; save_storage();
         return ();
     } elseif(op == op::payment()) {
-        ;; 赔付
-        ;; 校验手续费是否足够
-        int forward_fee = jetton_forward_gas_fee();
-        int base_fee = base_gas_fee();
-        ;; 校验手续费是否足够
-        throw_unless(Payment_Fee_Is_Not_Enough, msg_value >= (forward_fee + base_fee));
+        ;; ;; 赔付
+        ;; ;; 校验手续费是否足够
+        ;; int forward_fee = jetton_forward_gas_fee();
+        ;; int base_fee = base_gas_fee();
+        ;; ;; 校验手续费是否足够
+        ;; throw_unless(Payment_Fee_Is_Not_Enough, msg_value >= (forward_fee + base_fee));
 
-        ;; 获取当前轮数
-        int cur_round_num = in_msg_body~load_uint(32);
+        ;; ;; 获取当前轮数
+        ;; int cur_round_num = in_msg_body~load_uint(32);
         
-        ;; 处于游戏结束状态的游戏才能支付
-        throw_unless(Game_Is_Not_End, storage::game_state == 1);
-        throw_unless(Error_In_Current_Round, cur_round_num == storage::round_num);
-        ;; 计算游戏记录地址
-        slice game_record_addr = calculate_user_game_record_address(storage::round_num, my_address(), storage::jetton_minter_addr, 
-                                                                    storage::jetton_wallet_code, storage::game_record_code, storage::game_wallet_code); 
-        ;; 消息发送者必须是游戏记录地址
-        throw_unless(Sender_Is_Not_Game_Record_Addr, equal_slices(sender_address, game_record_addr));
+        ;; ;; 处于游戏结束状态的游戏才能支付
+        ;; throw_unless(Game_Is_Not_End, storage::game_state == 1);
+        ;; throw_unless(Error_In_Current_Round, cur_round_num == storage::round_num);
+        ;; ;; 计算游戏记录地址
+        ;; slice game_record_addr = calculate_user_game_record_address(storage::round_num, my_address(), storage::jetton_minter_addr, 
+        ;;                                                             storage::jetton_wallet_code, storage::game_record_code, storage::game_wallet_code); 
+        ;; ;; 消息发送者必须是游戏记录地址
+        ;; throw_unless(Sender_Is_Not_Game_Record_Addr, equal_slices(sender_address, game_record_addr));
 
-        ;; 计算crash game的jetton wallet地址
-        cell state_init = calculate_jetton_wallet_state_init(my_address(), storage::jetton_minter_addr, storage::jetton_wallet_code);
-        slice crash_game_jetton_wallet_addr = calculate_jetton_wallet_address(state_init);
+        ;; ;; 计算crash game的jetton wallet地址
+        ;; cell state_init = calculate_jetton_wallet_state_init(my_address(), storage::jetton_minter_addr, storage::jetton_wallet_code);
+        ;; slice crash_game_jetton_wallet_addr = calculate_jetton_wallet_address(state_init);
 
-        ;; 创建一个空的cell
-        var emptyCell = begin_cell().end_cell();
-        int profit = in_msg_body~load_coins();
-        ;; 源头消息发送者
-        slice org_sender_addr = in_msg_body~load_msg_addr();
-        ;; 结算地址, 接收token地址
-        slice settle_user_addr = in_msg_body~load_msg_addr();
-        ;; slice user_game_wallet_addr = in_msg_body~load_msg_addr();
-        slice user_game_wallet_addr = calculate_user_game_wallet_address(settle_user_addr, my_address(), storage::game_wallet_code, 
-                                                                         storage::jetton_minter_addr, storage::jetton_wallet_code, storage::game_record_code);
-        ;; 响应transfer notify payload
-        ;; var transfer_notify_payload = begin_cell()
-        ;;         .store_uint(op::settlement(), 32)
+        ;; ;; 创建一个空的cell
+        ;; var emptyCell = begin_cell().end_cell();
+        ;; int profit = in_msg_body~load_coins();
+        ;; ;; 源头消息发送者
+        ;; slice org_sender_addr = in_msg_body~load_msg_addr();
+        ;; ;; 结算地址, 接收token地址
+        ;; slice settle_user_addr = in_msg_body~load_msg_addr();
+        ;; ;; slice user_game_wallet_addr = in_msg_body~load_msg_addr();
+        ;; slice user_game_wallet_addr = calculate_user_game_wallet_address(settle_user_addr, my_address(), storage::game_wallet_code, 
+        ;;                                                                  storage::jetton_minter_addr, storage::jetton_wallet_code, storage::game_record_code);
+        ;; ;; 响应transfer notify payload
+        ;; ;; var transfer_notify_payload = begin_cell()
+        ;; ;;         .store_uint(op::settlement(), 32)
+        ;; ;;     .end_cell();
+        ;; ;; 转账jetton给用户的结算地址
+        ;; var transfer_msg = begin_cell()
+        ;;         .store_uint(op::transfer(), 32)
+        ;;         .store_uint(query_id, 64)
+        ;;         .store_coins(profit)    ;; 转账收益
+        ;;         ;; .store_slice(user_game_wallet_addr) ;; to address
+        ;;         ;; .store_slice(org_sender_addr)  ;; reponse address
+        ;;         .store_slice(settle_user_addr) ;; to address, 接收token
+        ;;         .store_slice(user_game_wallet_addr)  ;; reponse address, 用于处理excesses事件，重置用户的游戏数据
+        ;;         .store_maybe_ref(emptyCell)
+        ;;         .store_coins(base_fee)                ;; forward_amount
+        ;;         ;; .store_maybe_ref(transfer_notify_payload)
+        ;;         .store_maybe_ref(emptyCell)  
         ;;     .end_cell();
-        ;; 转账jetton给用户的结算地址
-        var transfer_msg = begin_cell()
-                .store_uint(op::transfer(), 32)
-                .store_uint(query_id, 64)
-                .store_coins(profit)    ;; 转账收益
-                ;; .store_slice(user_game_wallet_addr) ;; to address
-                ;; .store_slice(org_sender_addr)  ;; reponse address
-                .store_slice(settle_user_addr) ;; to address, 接收token
-                .store_slice(user_game_wallet_addr)  ;; reponse address, 用于处理excesses事件，重置用户的游戏数据
-                .store_maybe_ref(emptyCell)
-                .store_coins(base_fee)                ;; forward_amount
-                ;; .store_maybe_ref(transfer_notify_payload)
-                .store_maybe_ref(emptyCell)  
-            .end_cell();
 
-        var msg = begin_cell()
-            .store_uint(0x18, 6)
-            .store_slice(crash_game_jetton_wallet_addr)
-            .store_coins(forward_fee)   ;; ton_amount
-            .store_uint(4 + 2 + 1, 1 + 4 + 4 + 64 + 32 + 1 + 1 + 1)
-            .store_ref(state_init)
-            .store_ref(transfer_msg);     ;; 转账jetton token消息
-        send_raw_message(msg.end_cell(), 1); ;; pay transfer fees separately, revert on errors
+        ;; var msg = begin_cell()
+        ;;     .store_uint(0x18, 6)
+        ;;     .store_slice(crash_game_jetton_wallet_addr)
+        ;;     .store_coins(forward_fee)   ;; ton_amount
+        ;;     .store_uint(4 + 2 + 1, 1 + 4 + 4 + 64 + 32 + 1 + 1 + 1)
+        ;;     .store_ref(state_init)
+        ;;     .store_ref(transfer_msg);     ;; 转账jetton token消息
+        ;; send_raw_message(msg.end_cell(), 1); ;; pay transfer fees separately, revert on errors
         return ();
     } elseif(op == op::withdraw()) {
-        ;; 只有管理员可以赎回jetton
-        throw_unless(Sender_Is_Not_Admin_Addr, equal_slices(sender_address, storage::admin_addr));
-        ;; 只有游戏结束时可以赎回jetton
-        throw_unless(Game_Is_Not_End, storage::game_state == 1);
-        ;; 只有当前轮所有赢的玩家结算完成后可以赎回
+        ;; ;; 只有管理员可以赎回jetton
+        ;; throw_unless(Sender_Is_Not_Admin_Addr, equal_slices(sender_address, storage::admin_addr));
+        ;; ;; 只有游戏结束时可以赎回jetton
+        ;; throw_unless(Game_Is_Not_End, storage::game_state == 1);
+        ;; ;; 只有当前轮所有赢的玩家结算完成后可以赎回
 
-        withdraw(query_id, msg_value, in_msg_body, sender_address, storage::jetton_minter_addr, storage::jetton_wallet_code);
+        ;; withdraw(query_id, msg_value, in_msg_body, sender_address, storage::jetton_minter_addr, storage::jetton_wallet_code);
         return ();
     } elseif(op == op::transfer_notification()) {
-        ;; 发送金额和发送者
-        (int jetton_amount, slice from_user) = (in_msg_body~load_coins(), in_msg_body~load_msg_addr());
-        throw_unless(Transfer_Jetton_Amount_Is_Zero, jetton_amount > 0);
-        ;; 发送者是crash game的jetton wallet地址
-        slice crash_game_jetton_wallet_addr = calculate_user_jetton_wallet_address(my_address(), storage::jetton_minter_addr, storage::jetton_wallet_code);
-        throw_unless(Sender_Is_Not_Crash_Game_Jetton_Wallet_Addr, equal_slices(crash_game_jetton_wallet_addr, sender_address));
+        ;; ;; 发送金额和发送者
+        ;; (int jetton_amount, slice from_user) = (in_msg_body~load_coins(), in_msg_body~load_msg_addr());
+        ;; throw_unless(Transfer_Jetton_Amount_Is_Zero, jetton_amount > 0);
+        ;; ;; 发送者是crash game的jetton wallet地址
+        ;; slice crash_game_jetton_wallet_addr = calculate_user_jetton_wallet_address(my_address(), storage::jetton_minter_addr, storage::jetton_wallet_code);
+        ;; throw_unless(Sender_Is_Not_Crash_Game_Jetton_Wallet_Addr, equal_slices(crash_game_jetton_wallet_addr, sender_address));
 
-        cell payload = in_msg_body~load_ref(); 
-        slice payload_msg = payload.begin_parse();
+        ;; cell payload = in_msg_body~load_ref(); 
+        ;; slice payload_msg = payload.begin_parse();
 
-        ;; 检查是否有payload
-        if (payload_msg.slice_empty?()) { ;; ignore empty messages
-            return ();
-        }
+        ;; ;; 检查是否有payload
+        ;; if (payload_msg.slice_empty?()) { ;; ignore empty messages
+        ;;     return ();
+        ;; }
 
-        int notify_op = payload_msg~load_uint(32);
-        if(notify_op == op::bet()) {
-            ;; 处理bet消息
-            ;; 获取当前轮数
-            int cur_round_num = payload_msg~load_uint(32);
-            ;; 判断游戏状态: 0: 投注期, 1: 游戏结束（待优化，如果此轮游戏结束，应下注到处于投注期下一轮游戏中）
-            throw_unless(Game_Is_Not_Start, storage::game_state == 0);
-            ;; 只能下当前轮（后期优化：可以对前几轮未结束的游戏下注）
-            throw_unless(Error_In_Current_Round, cur_round_num == storage::round_num);
+        ;; int notify_op = payload_msg~load_uint(32);
+        ;; if(notify_op == op::bet()) {
+        ;;     ;; 处理bet消息
+        ;;     ;; 获取当前轮数
+        ;;     int cur_round_num = payload_msg~load_uint(32);
+        ;;     ;; 判断游戏状态: 0: 投注期, 1: 游戏结束（待优化，如果此轮游戏结束，应下注到处于投注期下一轮游戏中）
+        ;;     throw_unless(Game_Is_Not_Start, storage::game_state == 0);
+        ;;     ;; 只能下当前轮（后期优化：可以对前几轮未结束的游戏下注）
+        ;;     throw_unless(Error_In_Current_Round, cur_round_num == storage::round_num);
 
-            ;; 玩家地址(转账地址即为玩家)
-            slice player_address = from_user;
-            ;; 向玩家的GameWallet地址转发bet消息
-            bet(msg_value, query_id, storage::round_num, jetton_amount, player_address, payload_msg, storage::game_wallet_code, 
-                storage::jetton_minter_addr, storage::jetton_wallet_code, storage::game_record_code);
+        ;;     ;; 玩家地址(转账地址即为玩家)
+        ;;     slice player_address = from_user;
+        ;;     ;; 向玩家的GameWallet地址转发bet消息
+        ;;     bet(msg_value, query_id, storage::round_num, jetton_amount, player_address, payload_msg, storage::game_wallet_code, 
+        ;;         storage::jetton_minter_addr, storage::jetton_wallet_code, storage::game_record_code);
 
-            ;; 统计此轮参与游戏的玩家人数
-            storage::player_nums += 1;
+        ;;     ;; 统计此轮参与游戏的玩家人数
+        ;;     storage::player_nums += 1;
 
-            ;; 存储数据
-            save_storage();
-            return ();
-        }
+        ;;     ;; 存储数据
+        ;;     save_storage();
+        ;;     return ();
+        ;; }
         
         ;; slice player_addr = payload_msg~load_msg_addr();
         ;; force_chain(WORKCHAIN, player_addr, WRONG_WORKCHAIN);
@@ -321,17 +335,13 @@
     return game_record_addr;
 }
 
-(int, int, int, int, int, int, int, int, int, slice, slice, cell, cell, cell) get_info() method_id {
+(cell, int, int, int, int, slice, slice, cell, cell, cell) get_info() method_id {
     load_storage();
     return (
-        storage::round_num,
-        storage::game_state,
-        storage::seed,
-        storage::crash_multiple,
-        storage::player_nums,
-        storage::start_unix_time,
-        storage::start_tx_time,
-        storage::start_blk_time,
+        storage::dict_game_infos,
+        storage::current_round_index,
+        storage::current_round_num,
+        storage::max_rounds_parallel,
         storage::min_interval_time,
         storage::admin_addr,
         storage::jetton_minter_addr,
@@ -340,5 +350,3 @@
         storage::game_record_code
     );
 }
-
-

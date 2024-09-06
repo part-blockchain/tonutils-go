@@ -34,7 +34,7 @@ type CrashGameInfo struct {
 	ContractAddr     *address.Address // CrashGame合约地址
 	Data             *Data            // CrashGame合约数据
 	JettonWalletInfo JettonWalletInfo // JettonWallet合约信息
-	GameRecordInfo   GameRecordInfo   // GameRecord合约信息
+	GameRecordInfos  []GameRecordInfo // GameRecord合约信息
 }
 
 // GameWalletInfo GameWallet合约信息
@@ -51,22 +51,32 @@ type PlayerInfo struct {
 	GameWalletInfo   GameWalletInfo   // GameWallet合约信息
 }
 
+// GameInfoPeerRound 每轮游戏轮数信息
+type GameInfoPeerRound struct {
+	RoundIndex    uint64 //  游戏轮数索引
+	RoundNum      uint64 //  游戏轮数
+	GameState     uint64 //  游戏状态: 0-bet; 1-游戏结束/未启动
+	Seed          uint64 //  随机数种子
+	CrashMultiple uint64 // Crash乘数, 即爆炸倍数, 单位:%
+	PlayerNums    uint64 // 玩家数量
+	StartUnixTime uint64 // 游戏开始时间(unix)
+	StartTxTime   uint64 // 游戏开始交易时间(unix)
+	StartBlkTime  uint64 // 游戏开始区块时间(unix)
+}
+
 // Data crash game合约存储数据
 type Data struct {
-	RoundNum         uint64           //  游戏轮数
-	GameState        uint64           //  游戏状态: 0-bet; 1-游戏结束/未启动
-	Seed             uint64           //  随机数种子
-	CrashMultiple    uint64           // Crash乘数, 即爆炸倍数, 单位:%
-	PlayerNums       uint64           // 玩家数量
-	StartUnixTime    uint64           // 游戏开始时间(unix)
-	StartTxTime      uint64           // 游戏开始交易时间(unix)
-	StartBlkTime     uint64           // 游戏开始区块时间(unix)
-	MinIntervalTime  uint64           //  一轮游戏从创建完成到crash的最小时间间隔,单位秒
-	AdminAddr        *address.Address //  管理员地址
-	JettonMinterAddr *address.Address //  JettonMinter合约地址
-	JettonWalletCode *cell.Cell       //  JettonWallet合约代码
-	GameWalletCode   *cell.Cell       //  GameWallet合约代码
-	GameRecordCode   *cell.Cell       //  GameRecord合约代码
+	CellGameInfos *cell.Cell //  存储游戏所有轮游戏信息
+
+	CurrentRoundIndex uint64           // 当前轮索引
+	CurrentRoundNum   uint64           // 当前轮数
+	MaxRoundsParallel uint64           //  最大并行游戏轮数
+	MinIntervalTime   uint64           //  一轮游戏从创建完成到crash的最小时间间隔,单位秒
+	AdminAddr         *address.Address //  管理员地址
+	JettonMinterAddr  *address.Address //  JettonMinter合约地址
+	JettonWalletCode  *cell.Cell       //  JettonWallet合约代码
+	GameWalletCode    *cell.Cell       //  GameWallet合约代码
+	GameRecordCode    *cell.Cell       //  GameRecord合约代码
 }
 
 type Client struct {
@@ -135,17 +145,18 @@ func (c *Client) GetRoundNum(ctx context.Context) (uint64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed to run get_info method by CrashGame contract: %w", err)
 	}
-	return getValueFromExecutionResult(res, 0, "roundNum", false).(*big.Int).Uint64(), nil
+	index := uint(2) // CurrentRoundNum:当前轮数, 用于统计游戏的总轮数
+	return getValueFromExecutionResult(res, &index, "roundNum", false).(*big.Int).Uint64(), nil
 }
 
 // 从执行结果中获取对应的值
-func getValueFromExecutionResult(res *ton.ExecutionResult, index uint, keyName string, isAddrType bool) (value interface{}) {
-	if res == nil || res.Length() <= index {
+func getValueFromExecutionResult(res *ton.ExecutionResult, index *uint, keyName string, isAddrType bool) (value interface{}) {
+	if res == nil || res.Length() <= *index {
 		errMsg := fmt.Errorf("%s get err: invalid result or index:%d", keyName, index)
 		log.Fatal(errMsg)
 		return nil
 	}
-	typeName := res.Type(index)
+	typeName := res.Type(*index)
 	if typeName == "null" {
 		// 无效的null类型
 		errMsg := fmt.Errorf("%s get err: invalid null type:%d", keyName, index)
@@ -155,14 +166,14 @@ func getValueFromExecutionResult(res *ton.ExecutionResult, index uint, keyName s
 	err := errors.New("")
 	switch typeName {
 	case "*big.Int":
-		value, err = res.Int(index)
+		value, err = res.Int(*index)
 	case "*cell.Slice":
-		value, err = res.Slice(index)
+		value, err = res.Slice(*index)
 		if isAddrType && value != nil && err == nil {
 			value, err = value.(*cell.Slice).LoadAddr()
 		}
 	case "*cell.Cell":
-		value, err = res.Cell(index)
+		value, err = res.Cell(*index)
 	}
 
 	if err != nil {
@@ -170,6 +181,7 @@ func getValueFromExecutionResult(res *ton.ExecutionResult, index uint, keyName s
 		log.Fatal(errMsg)
 		return nil
 	}
+	*index += 1
 	return value
 }
 
@@ -179,25 +191,22 @@ func (c *Client) GetCrashGameDataAtBlock(ctx context.Context, b *ton.BlockIDExt,
 		return nil, fmt.Errorf("failed to run get_info method by CrashGame contract: %w", err)
 	}
 
+	index := uint(0)
 	data := &Data{
-		RoundNum:         getValueFromExecutionResult(res, 0, "roundNum", false).(*big.Int).Uint64(),        //  游戏轮数
-		GameState:        getValueFromExecutionResult(res, 1, "gameState", false).(*big.Int).Uint64(),       //  游戏状态: 0-bet; 1-游戏结束/未启动
-		Seed:             getValueFromExecutionResult(res, 2, "seed", false).(*big.Int).Uint64(),            //  随机数种子
-		CrashMultiple:    getValueFromExecutionResult(res, 3, "crashMultiple", false).(*big.Int).Uint64(),   // Crash乘数, 即爆炸倍数, 单位:%
-		PlayerNums:       getValueFromExecutionResult(res, 4, "playerNums", false).(*big.Int).Uint64(),      // 玩家数量
-		StartUnixTime:    getValueFromExecutionResult(res, 5, "startUnixTime", false).(*big.Int).Uint64(),   // 游戏开始时间(unix)
-		StartTxTime:      getValueFromExecutionResult(res, 6, "startTxTime", false).(*big.Int).Uint64(),     // 游戏开始交易时间(unix)
-		StartBlkTime:     getValueFromExecutionResult(res, 7, "startBlkTime", false).(*big.Int).Uint64(),    // 游戏开始区块时间(unix)
-		MinIntervalTime:  getValueFromExecutionResult(res, 8, "minIntervalTime", false).(*big.Int).Uint64(), //  一轮游戏从创建完成到crash的最小时间间隔,单位秒
-		AdminAddr:        getValueFromExecutionResult(res, 9, "adminAddr", true).(*address.Address),         //  管理员地址
-		JettonMinterAddr: getValueFromExecutionResult(res, 10, "jettonMinterAddr", true).(*address.Address), //  JettonMinter合约地址
+		CellGameInfos:     getValueFromExecutionResult(res, &index, "cellGameInfos", false).(*cell.Cell),            // 存储游戏所有轮游戏信息
+		CurrentRoundIndex: getValueFromExecutionResult(res, &index, "CurrentRoundIndex", false).(*big.Int).Uint64(), //  当前轮索引, 用于遍历可用的轮数
+		CurrentRoundNum:   getValueFromExecutionResult(res, &index, "CurrentRoundNum", false).(*big.Int).Uint64(),   //  当前轮数, 用于统计游戏的总轮数
+		MaxRoundsParallel: getValueFromExecutionResult(res, &index, "maxRoundsParallel", false).(*big.Int).Uint64(), //  最大并行游戏轮数
+		MinIntervalTime:   getValueFromExecutionResult(res, &index, "minIntervalTime", false).(*big.Int).Uint64(),   //  一轮游戏从创建完成到crash的最小时间间隔,单位秒
+		AdminAddr:         getValueFromExecutionResult(res, &index, "adminAddr", true).(*address.Address),           //  管理员地址
+		JettonMinterAddr:  getValueFromExecutionResult(res, &index, "jettonMinterAddr", true).(*address.Address),    //  JettonMinter合约地址
 	}
 
 	// 显示合约的code
 	if showCode {
-		data.JettonWalletCode = getValueFromExecutionResult(res, 11, "jettonWalletCode", false).(*cell.Cell) //  JettonWallet合约代码
-		data.GameWalletCode = getValueFromExecutionResult(res, 12, "gameWalletCode", false).(*cell.Cell)     //  GameWallet合约代码
-		data.GameRecordCode = getValueFromExecutionResult(res, 13, "gameRecordCode", false).(*cell.Cell)     //  GameRecord合约代码
+		data.JettonWalletCode = getValueFromExecutionResult(res, &index, "jettonWalletCode", false).(*cell.Cell) //  JettonWallet合约代码
+		data.GameWalletCode = getValueFromExecutionResult(res, &index, "gameWalletCode", false).(*cell.Cell)     //  GameWallet合约代码
+		data.GameRecordCode = getValueFromExecutionResult(res, &index, "gameRecordCode", false).(*cell.Cell)     //  GameRecord合约代码
 	}
 
 	return data, nil

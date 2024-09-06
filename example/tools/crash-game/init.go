@@ -31,10 +31,11 @@ type JettonConfig struct {
 
 // CrashGameConfig crash game配置
 type CrashGameConfig struct {
-	ContractAddr    string `json:"crash_game_addr"`
-	RoundNum        uint64 `json:"round_num"`
-	MinIntervalTime uint64 `json:"min_interval_time"` // 最大间隔时间,单位秒
-	Bet             struct {
+	ContractAddr      string `json:"crash_game_addr"`
+	MaxRoundsParallel uint64 `json:"max_rounds_parallel"` // 最大并行游戏轮数
+	RoundNum          uint64 `json:"round_num"`
+	MinIntervalTime   uint64 `json:"min_interval_time"` // 最大间隔时间,单位秒
+	Bet               struct {
 		Amount   string `json:"amount"`
 		Multiple uint64 `json:"multiple"`
 	} `json:"bet"`

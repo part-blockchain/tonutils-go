@@ -64,19 +64,20 @@ func (c *GameWalletClient) GetGameWalletDataAtBlock(ctx context.Context, b *ton.
 		return nil, fmt.Errorf("failed to run get_info method by GameWallet contract: %w", err)
 	}
 
+	index := uint(0)
 	data := &GameWalletData{
-		RoundNum:         getValueFromExecutionResult(res, 0, "RoundNum", false).(*big.Int).Uint64(),       //  游戏轮数
-		BetAmount:        getValueFromExecutionResult(res, 1, "BetAmount", false).(*big.Int).Uint64(),      //  下注金额
-		Multiple:         getValueFromExecutionResult(res, 2, "Multiple", false).(*big.Int).Uint64(),       //  玩家指定的乘数
-		WalletOwnerAddr:  getValueFromExecutionResult(res, 3, "WalletOwnerAddr", true).(*address.Address),  //  游戏钱包的owner地址
-		CrashGameAddr:    getValueFromExecutionResult(res, 4, "CrashGameAddr", true).(*address.Address),    //  CrashGame合约地址
-		JettonMinterAddr: getValueFromExecutionResult(res, 5, "JettonMinterAddr", true).(*address.Address), //  JettonMinter合约地址
+		RoundNum:         getValueFromExecutionResult(res, &index, "RoundNum", false).(*big.Int).Uint64(),       //  游戏轮数
+		BetAmount:        getValueFromExecutionResult(res, &index, "BetAmount", false).(*big.Int).Uint64(),      //  下注金额
+		Multiple:         getValueFromExecutionResult(res, &index, "Multiple", false).(*big.Int).Uint64(),       //  玩家指定的乘数
+		WalletOwnerAddr:  getValueFromExecutionResult(res, &index, "WalletOwnerAddr", true).(*address.Address),  //  游戏钱包的owner地址
+		CrashGameAddr:    getValueFromExecutionResult(res, &index, "CrashGameAddr", true).(*address.Address),    //  CrashGame合约地址
+		JettonMinterAddr: getValueFromExecutionResult(res, &index, "JettonMinterAddr", true).(*address.Address), //  JettonMinter合约地址
 	}
 
 	// 显示合约的code
 	if showCode {
-		data.JettonWalletCode = getValueFromExecutionResult(res, 6, "JettonWalletCode", false).(*cell.Cell) //  JettonWallet合约代码
-		data.GameRecordCode = getValueFromExecutionResult(res, 7, "gameRecordCode", false).(*cell.Cell)     //  GameRecord合约代码
+		data.JettonWalletCode = getValueFromExecutionResult(res, &index, "JettonWalletCode", false).(*cell.Cell) //  JettonWallet合约代码
+		data.GameRecordCode = getValueFromExecutionResult(res, &index, "gameRecordCode", false).(*cell.Cell)     //  GameRecord合约代码
 	}
 
 	return data, nil
