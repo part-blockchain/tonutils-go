@@ -1,0 +1,80 @@
+#include "../lib/stdlib.fc";
+#include "op-codes.fc";
+
+(cell) load_data() impure inline {
+    slice ds = get_data().begin_parse();
+    cell dict_infos = ds~load_dict(); ;; 字典信息
+    return dict_infos;
+    ;; int current_round_index = ds~load_uint(32); ;; 当前轮索引
+}
+
+() save_data(cell dict_infos) impure inline {
+    set_data(begin_cell()
+        .store_dict(dict_infos)
+        ;;.store_uint(storage::current_round_index, 32)
+    .end_cell());
+}
+
+int get_key_by_id(int keyId) method_id {
+    return cell_hash(begin_cell()
+        .store_uint(keyId, 32)
+        .end_cell());
+}
+
+;; recv_internal is the main function of the contract and is called when it receives a message from other contracts
+() recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
+    if (in_msg_body.slice_empty?()) { ;; ignore all empty messages
+        return ();
+    }
+
+    slice cs = in_msg_full.begin_parse();
+    int flags = cs~load_uint(4);
+    if (flags & 1) { ;; ignore all bounced messages
+        return ();
+    }
+
+    slice sender_address = cs~load_msg_addr();
+    int op = in_msg_body~load_uint(32); ;; by convention, the first 32 bits of incoming message is the op
+    int query_id = in_msg_body~load_uint(64); ;; also by convention, the next 64 bits contain the "query id", although this is not always the case
+
+    (cell dict_infos) = load_data();
+    int keyId = 0;
+    int keyLen = 256;
+
+    int key = get_key_by_id(keyId);
+    if(op == op::set_dict()) {
+        ;; 设置值
+        if(dict_infos.dict_empty?()) {
+            dict_infos = new_dict();
+        }
+
+        cell newCell = in_msg_body~load_ref();
+        dict_infos~udict_set_ref(keyLen, key, newCell);
+        save_data(dict_infos);
+        return ();
+    } elseif(op == op::update_dict()) {
+        int value = in_msg_body~load_uint(32);
+        var updateCell = begin_cell()
+                .store_uint(value, 32)
+             .end_cell();
+
+        dict_infos~udict_set_ref(keyLen, key, updateCell);
+        save_data(dict_infos);
+    }
+
+    throw(0xffff);
+}
+
+;; 不能直接返回字典，否则会报错
+;;(cell) get_info() method_id {
+;;    return load_data();
+;;}
+
+;; 通过keyId获取信息，并返回字典中的元素
+(cell) get_info(int keyId) method_id {
+    (cell dict_infos) = load_data();
+    int key = get_key_by_id(keyId);
+    (cell elem, _) = dict_infos.udict_get_ref?(256, key);
+
+    return elem;
+}

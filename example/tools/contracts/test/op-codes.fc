@@ -1,0 +1,3 @@
+;; dict test
+int op::set_dict() asm "0x20a4c01e PUSHINT"; ;; 设置字典值
+int op::update_dict() asm "0x9c674765 PUSHINT"; ;; 更新字典值

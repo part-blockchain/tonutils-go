@@ -47,7 +47,7 @@ func getContractCode(contractCodeFilePath, fileName string) *cell.Cell {
 	fmt.Printf("%s code file path: %s\n", fileName, contractCodeFilePath)
 	data, err := ioutil.ReadFile(contractCodeFilePath)
 	if err != nil {
-		fmt.Printf("get %s code failed:%s\n", fileName, err)
+		log.Fatalf("get [%s] code failed:%s\n", fileName, err)
 		return nil
 	}
 	// 读取文件内容
