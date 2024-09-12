@@ -28,6 +28,9 @@ func智能合约dict类型测试：
 1. 部署合约
 2. 获取合约信息
 */
+const (
+	DictKeyLen = 16
+)
 
 // TestDictData test dict合约存储数据
 type TestDictData struct {
@@ -36,7 +39,7 @@ type TestDictData struct {
 
 // getDeployTestDictData 获取部署TestDict的data
 func getDeployTestDictData() (_ *cell.Cell, err error) {
-	dictGameInfos := cell.NewDict(32)
+	dictGameInfos := cell.NewDict(DictKeyLen)
 	k := big.NewInt(int64(0))
 	gameInfo := &CrashGame.GameInfoPeerRound{
 		RoundIndex: uint64(111), // 游戏轮数索引
@@ -72,7 +75,7 @@ func getDeployTestDictData() (_ *cell.Cell, err error) {
 	//	EndCell()
 
 	data := cell.BeginCell().
-		MustStoreDict(cell.NewDict(256)).
+		MustStoreDict(cell.NewDict(DictKeyLen)).
 		EndCell()
 
 	// 校验data hash
@@ -338,7 +341,7 @@ func SetDictData(ctx context.Context, contractAddr string, w *wallet.Wallet) (er
 	body := cell.BeginCell().
 		MustStoreUInt(OpSetTestDict, 32).
 		MustStoreUInt(rnd, 64).
-		MustStoreRef(cell.BeginCell().MustStoreUInt(200, 32).EndCell()).
+		MustStoreRef(cell.BeginCell().MustStoreUInt(888, 32).EndCell()).
 		EndCell()
 
 	// your TON balance must be > 0.05 to send

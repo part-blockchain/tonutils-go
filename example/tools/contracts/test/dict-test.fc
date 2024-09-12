@@ -15,12 +15,6 @@
     .end_cell());
 }
 
-int get_key_by_id(int keyId) method_id {
-    return cell_hash(begin_cell()
-        .store_uint(keyId, 32)
-        .end_cell());
-}
-
 ;; recv_internal is the main function of the contract and is called when it receives a message from other contracts
 () recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
     if (in_msg_body.slice_empty?()) { ;; ignore all empty messages
@@ -38,10 +32,9 @@ int get_key_by_id(int keyId) method_id {
     int query_id = in_msg_body~load_uint(64); ;; also by convention, the next 64 bits contain the "query id", although this is not always the case
 
     (cell dict_infos) = load_data();
-    int keyId = 0;
-    int keyLen = 256;
+    int key = 0;
+    int keyLen = 16;
 
-    int key = get_key_by_id(keyId);
     if(op == op::set_dict()) {
         ;; 设置值
         if(dict_infos.dict_empty?()) {
@@ -71,10 +64,10 @@ int get_key_by_id(int keyId) method_id {
 ;;}
 
 ;; 通过keyId获取信息，并返回字典中的元素
-(cell) get_info(int keyId) method_id {
+(cell) get_info(int key) method_id {
+    int keyLen = 16;
     (cell dict_infos) = load_data();
-    int key = get_key_by_id(keyId);
-    (cell elem, _) = dict_infos.udict_get_ref?(256, key);
+    (cell elem, _) = dict_infos.udict_get_ref?(keyLen, key);
 
     return elem;
 }
