@@ -14,6 +14,7 @@ const Bet_Fee_Is_Not_Enough = 111;      ;; Bet的gas fee不足
 const Withdraw_Fee_Is_Not_Enough = 112;      ;; Withdraw的gas fee不足
 const Withdraw_To_Crash_Game_Self = 113;  ;; CrashGame赎回给自己，无意义
 const No_Player = 114;  ;; 无玩家参与此轮游戏
+const Error_Round_Index = 115;  ;; 错误游戏轮索引
 
 ;; GameRecord
 const Sender_Is_Not_Crash_Game_Addr = 200;  ;; 发送者不是crash game地址
@@ -23,6 +24,7 @@ const Bet_Amount_Is_Zero = 203;   ;; 下注金额为0
 const Player_Multiple_Must_Greater_Zero = 204;   ;; 玩家乘数必须大于0
 const Player_Multiple_Cannot_Larger_Crash = 205;   ;; 玩家乘数不能大于crash乘数，才算玩家赢
 const Player_Profit_Must_Greater_Zero = 206;   ;; 玩家收益必须大于0
+const Error_In_Current_Round_Index = 207;  ;; 当前游戏轮索引错误
 
 ;; GameWallet
 const Player_Double_Bet_On_Current_Round = 300;  ;; 玩家在当前轮游戏重复下注

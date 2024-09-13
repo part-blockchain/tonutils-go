@@ -20,6 +20,7 @@ type SettlementPayload struct {
 	_             tlb.Magic        `tlb:"#bbc88046"` // settlement opcode
 	QueryID       uint64           `tlb:"## 64"`
 	RoundNum      uint64           `tlb:"## 32"` // round number, 32 bits
+	RoundIndex    uint64           `tlb:"## 32"` // round index, 32 bits
 	ForwardGasFee tlb.Coins        `tlb:"."`
 	SettleAddr    *address.Address `tlb:"addr"`
 }
@@ -83,8 +84,12 @@ func (c *GameWalletClient) GetGameWalletDataAtBlock(ctx context.Context, b *ton.
 	return data, nil
 }
 
+func getRoundIndexByNum(roundNum, maxRoundsParallel uint64) uint64 {
+	return (roundNum - 1) % maxRoundsParallel
+}
+
 // BuildSettlementPayload 生成settlement的Payload
-func (c *GameWalletClient) BuildSettlementPayload(roundNum uint64, forwardGasFee tlb.Coins, settleAddr *address.Address) (*cell.Cell, error) {
+func (c *GameWalletClient) BuildSettlementPayload(roundNum, maxRoundsParallel uint64, forwardGasFee tlb.Coins, settleAddr *address.Address) (*cell.Cell, error) {
 
 	buf := make([]byte, 8)
 	if _, err := rand.Read(buf); err != nil {
@@ -95,6 +100,7 @@ func (c *GameWalletClient) BuildSettlementPayload(roundNum uint64, forwardGasFee
 	txPayload := SettlementPayload{
 		QueryID:       rnd,
 		RoundNum:      roundNum,
+		RoundIndex:    getRoundIndexByNum(roundNum, maxRoundsParallel),
 		ForwardGasFee: forwardGasFee,
 		SettleAddr:    settleAddr,
 	}
@@ -108,8 +114,8 @@ func (c *GameWalletClient) BuildSettlementPayload(roundNum uint64, forwardGasFee
 }
 
 // Settlement 结算游戏
-func (c *GameWalletClient) Settlement(ctx *context.Context, w *wallet.Wallet, roundNum uint64, gasFee, forwardGasFee tlb.Coins, settleAddr *address.Address) (error, string) {
-	settlePayload, err := c.BuildSettlementPayload(roundNum, forwardGasFee, settleAddr)
+func (c *GameWalletClient) Settlement(ctx *context.Context, w *wallet.Wallet, roundNum, maxRoundsParallel uint64, gasFee, forwardGasFee tlb.Coins, settleAddr *address.Address) (error, string) {
+	settlePayload, err := c.BuildSettlementPayload(roundNum, maxRoundsParallel, forwardGasFee, settleAddr)
 	if err != nil {
 		log.Fatalln("build settlement payload failed:", err.Error())
 		return err, ""

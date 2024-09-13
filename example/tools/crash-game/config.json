@@ -22,9 +22,9 @@
         "jetton_minter_addr": "EQB3P0QJS57NYXRYD5sTeCuhmEo82mLujpV00u91D6bQ2TG3"
     },
     "crash_game": {
-        "crash_game_addr": "EQCbUf53J4EsaY9cL2kps26S6bUa8WeH3BX_CnXRLLf6jo7j",
-        "max_rounds_parallel": 1,
-        "round_num": 30,
+        "crash_game_addr": "EQA2brvdJYQVXFlxcSc_RcDF-aMtSqxWl3Zm5-wEUEwhENit",
+        "max_rounds_parallel": 2,
+        "round_num": 2,
         "min_interval_time": 100,
         "bet": {
             "amount": "1",

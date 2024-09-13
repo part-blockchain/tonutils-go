@@ -20,7 +20,8 @@ import (
 )
 
 const (
-	OpBet = 0x9b0663d8
+	OpBet      = 0x9b0663d8
+	DictKeyLen = 16 // 游戏信息字典key长度
 )
 
 // 获取玩家的钱包
@@ -60,74 +61,8 @@ func getContractCode(contractCodeFilePath, fileName string) *cell.Cell {
 	return codeCell
 }
 
-// 获取crash game code
-func getCrashGameCode(crashGameCodeFilePath string) *cell.Cell {
-	if "" == crashGameCodeFilePath {
-		dir, _ := os.Getwd()
-		crashGameCodeFilePath = fmt.Sprintf("%s/example/tools/contracts/build/crash-game.cell", dir)
-	}
-	fmt.Printf("crash game code file path: %s\n", crashGameCodeFilePath)
-	data, err := ioutil.ReadFile(crashGameCodeFilePath)
-	if err != nil {
-		fmt.Println("get crash game code failed:", err)
-		return nil
-	}
-	// 读取文件内容
-	codeCell, err := cell.FromBOC(data)
-	if err != nil {
-		fmt.Println("get crash game code failed:", err)
-		panic(err)
-	}
-
-	return codeCell
-}
-
-// 获取crash game wallet code
-func getGameWalletCode(gameWalletCodeFilePath string) *cell.Cell {
-	if "" == gameWalletCodeFilePath {
-		dir, _ := os.Getwd()
-		gameWalletCodeFilePath = fmt.Sprintf("%s/example/tools/contracts/build/game-wallet.cell", dir)
-	}
-	fmt.Printf("game wallet code file path: %s\n", gameWalletCodeFilePath)
-	data, err := ioutil.ReadFile(gameWalletCodeFilePath)
-	if err != nil {
-		fmt.Println("get jetton wallet code failed:", err)
-		return nil
-	}
-	// 读取文件内容
-	codeCell, err := cell.FromBOC(data)
-	if err != nil {
-		fmt.Println("get jetton wallet code failed:", err)
-		panic(err)
-	}
-
-	return codeCell
-}
-
-// 获取crash game record code
-func getGameRecordCode(jettonWalletCodeFilePath string) *cell.Cell {
-	if "" == jettonWalletCodeFilePath {
-		dir, _ := os.Getwd()
-		jettonWalletCodeFilePath = fmt.Sprintf("%s/example/tools/contracts/build/jetton-wallet.cell", dir)
-	}
-	fmt.Printf("jetton wallet code file path: %s\n", jettonWalletCodeFilePath)
-	data, err := ioutil.ReadFile(jettonWalletCodeFilePath)
-	if err != nil {
-		fmt.Println("get jetton wallet code failed:", err)
-		return nil
-	}
-	// 读取文件内容
-	codeCell, err := cell.FromBOC(data)
-	if err != nil {
-		fmt.Println("get jetton wallet code failed:", err)
-		panic(err)
-	}
-
-	return codeCell
-}
-
 func initCrashGameData(maxRoundsParallel uint64) *cell.Dictionary {
-	dictGameInfos := cell.NewDict(256)
+	dictGameInfos := cell.NewDict(DictKeyLen)
 	for i := 0; i < int(maxRoundsParallel); i++ {
 		k := big.NewInt(int64(i))
 		gameInfo := &CrashGame.GameInfoPeerRound{
@@ -168,7 +103,6 @@ func getDeployCrashGameData(jettonMinterAddr, adminAddr *address.Address, maxRou
 
 	// 部署合约初始化数据
 	initData := &CrashGame.Data{
-		CurrentRoundIndex: 0,                 // 当前轮索引, 用于遍历可用的轮数
 		CurrentRoundNum:   0,                 // 当前轮数, 用于统计游戏的总轮数
 		MaxRoundsParallel: maxRoundsParallel, //  最大并行游戏轮数
 		MinIntervalTime:   minIntervalTime,   //  一轮游戏从创建完成到crash的最小时间间隔,单位秒
@@ -180,8 +114,8 @@ func getDeployCrashGameData(jettonMinterAddr, adminAddr *address.Address, maxRou
 	}
 
 	data := cell.BeginCell().
-		MustStoreDict(initCrashGameData(maxRoundsParallel)).
-		MustStoreUInt(initData.CurrentRoundIndex, 32).
+		// MustStoreDict(initCrashGameData(maxRoundsParallel)).
+		MustStoreDict(cell.NewDict(DictKeyLen)).
 		MustStoreUInt(initData.CurrentRoundNum, 32).
 		MustStoreUInt(initData.MaxRoundsParallel, 32).
 		MustStoreUInt(initData.MinIntervalTime, 32).
@@ -300,8 +234,25 @@ func DeployCrashGame(jettonMinterAddr, jettonWalletCodeFile, gameWalletCodeFile,
 	return nil
 }
 
-func parseGameInfoCell(cellGameInfos *cell.Cell, maxRoundsParallel uint64) []CrashGame.GameInfoPeerRound {
-	dictGameInfos, err := cellGameInfos.BeginParse().ToDict(256)
+// 解析字典信息
+func parseGameInfo(cellGameInfo *cell.Cell) *CrashGame.GameInfoPeerRound {
+	// 遍历游戏信息
+	gameInfo := CrashGame.GameInfoPeerRound{}
+	lv := cellGameInfo.BeginParse()
+	gameInfo.RoundIndex = lv.MustLoadUInt(32)    //  游戏轮数索引
+	gameInfo.RoundNum = lv.MustLoadUInt(32)      //  游戏轮数
+	gameInfo.GameState = lv.MustLoadUInt(32)     //  游戏状态: 0-bet; 1-游戏结束/未启动
+	gameInfo.Seed = lv.MustLoadUInt(32)          //  随机数种子
+	gameInfo.CrashMultiple = lv.MustLoadUInt(32) // Crash乘数, 即爆炸倍数, 单位:%
+	gameInfo.PlayerNums = lv.MustLoadUInt(32)    // 玩家数量
+	gameInfo.StartUnixTime = lv.MustLoadUInt(32) // 游戏开始时间(unix)
+	gameInfo.StartTxTime = lv.MustLoadUInt(64)   // 游戏开始交易时间(unix)
+	gameInfo.StartBlkTime = lv.MustLoadUInt(64)  // 游戏开始区块时间(unix)
+	return &gameInfo
+}
+
+func parseGameInfoCell(cellGameInfo *cell.Cell, maxRoundsParallel uint64) []CrashGame.GameInfoPeerRound {
+	dictGameInfos, err := cellGameInfo.BeginParse().ToDict(256)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -332,7 +283,7 @@ func parseGameInfoCell(cellGameInfos *cell.Cell, maxRoundsParallel uint64) []Cra
 }
 
 // GetCrashGameInfo 获取CrashGame信息
-func GetCrashGameInfo(crashGameAddr string, showCode bool) (error, *CrashGame.CrashGameInfo) {
+func GetCrashGameInfo(crashGameAddr string, showCode bool, roundNum uint64) (error, *CrashGame.CrashGameInfo) {
 	// read from config file
 	cfg, err := GetParamsCfg()
 	if nil != err {
@@ -341,6 +292,11 @@ func GetCrashGameInfo(crashGameAddr string, showCode bool) (error, *CrashGame.Cr
 	if "" == crashGameAddr {
 		crashGameAddr = cfg.CrashGameCfg.ContractAddr
 	}
+
+	if 0 == roundNum {
+		roundNum = cfg.CrashGameCfg.RoundNum
+	}
+
 	err, ctx, crashGame := newCrashGameClient(crashGameAddr)
 	if err != nil || nil == crashGame || nil == ctx {
 		return errors.New("new crash game client failed"), nil
@@ -349,7 +305,7 @@ func GetCrashGameInfo(crashGameAddr string, showCode bool) (error, *CrashGame.Cr
 	info := CrashGame.CrashGameInfo{}
 	info.ContractAddr = address.MustParseAddr(crashGameAddr)
 	// 获取合约数据
-	data, err := crashGame.GetCrashGameData(*ctx, showCode)
+	data, err := crashGame.GetCrashGameData(*ctx, showCode, roundNum)
 	if err != nil || nil == data {
 		log.Fatal(err)
 	}
@@ -383,32 +339,33 @@ func GetCrashGameInfo(crashGameAddr string, showCode bool) (error, *CrashGame.Cr
 	info.JettonWalletInfo.Balance = coinBalance.Val()
 
 	// 获取crash game合约的每一轮游戏信息
-	if data.CellGameInfos != nil {
+	if data.CellGameInfo != nil {
 		// 解析游戏信息
-		gameInfos := parseGameInfoCell(data.CellGameInfos, data.MaxRoundsParallel)
-		//byGameInfos, _ := json.Marshal(gameInfos)
-		byGameInfos, _ := json.MarshalIndent(gameInfos, "", "    ")
-		log.Println("gameInfos:\n", string(byGameInfos))
+		// gameInfos := parseGameInfoCell(data.CellGameInfo, data.MaxRoundsParallel)
+		gameInfo := parseGameInfo(data.CellGameInfo)
+		//byteGameInfo, _ := json.Marshal(gameInfos)
+		byteGameInfo, _ := json.MarshalIndent(gameInfo, "", "    ")
+		log.Println("gameInfo:\n", string(byteGameInfo))
 
-		// 获取游戏记录地址
-		for _, gameInfo := range gameInfos {
-			gameRecordAddr, err := crashGame.GetGameRecordAddr(*pCtx, gameInfo.RoundIndex)
-			if err != nil || nil == gameRecordAddr {
-				errMsg := fmt.Sprintf("get game record address failed: %s", err.Error())
-				return errors.New(errMsg), nil
-			}
-			gameRecordInfo := CrashGame.GameRecordInfo{
-				ContractAddr: gameRecordAddr,
-			}
-
-			err, recordData := GetGameRecordInfo(crashGameAddr, gameInfo.RoundIndex, showCode)
-			if err != nil || recordData == nil {
-				//errMsg := fmt.Sprintf("get game record info failed: %s", err.Error())
-				//log.Fatal(errMsg)
-			}
-			gameRecordInfo.Data = recordData
-			info.GameRecordInfos = append(info.GameRecordInfos, gameRecordInfo)
-		}
+		//// 获取游戏记录地址
+		//for _, gameInfo := range gameInfos {
+		//	gameRecordAddr, err := crashGame.GetGameRecordAddr(*pCtx, gameInfo.RoundIndex)
+		//	if err != nil || nil == gameRecordAddr {
+		//		errMsg := fmt.Sprintf("get game record address failed: %s", err.Error())
+		//		return errors.New(errMsg), nil
+		//	}
+		//	gameRecordInfo := CrashGame.GameRecordInfo{
+		//		ContractAddr: gameRecordAddr,
+		//	}
+		//
+		//	err, recordData := GetGameRecordInfo(crashGameAddr, gameInfo.RoundIndex, showCode)
+		//	if err != nil || recordData == nil {
+		//		//errMsg := fmt.Sprintf("get game record info failed: %s", err.Error())
+		//		//log.Fatal(errMsg)
+		//	}
+		//	gameRecordInfo.Data = recordData
+		//	info.GameRecordInfos = append(info.GameRecordInfos, gameRecordInfo)
+		//}
 
 	}
 
@@ -419,7 +376,7 @@ func GetCrashGameInfo(crashGameAddr string, showCode bool) (error, *CrashGame.Cr
 }
 
 // GetCrashGameData 获取CrashGame合约数据
-func GetCrashGameData(crashGameAddr string, showCode bool) (error, *CrashGame.Data) {
+func GetCrashGameData(crashGameAddr string, showCode bool, roundNum uint64) (error, *CrashGame.Data) {
 	if "" == crashGameAddr {
 		// read from config file
 		cfg, err := GetParamsCfg()
@@ -432,7 +389,7 @@ func GetCrashGameData(crashGameAddr string, showCode bool) (error, *CrashGame.Da
 	if err != nil || nil == crashGame || nil == ctx {
 		return errors.New("new crash game client failed"), nil
 	}
-	data, err := crashGame.GetCrashGameData(*ctx, showCode)
+	data, err := crashGame.GetCrashGameData(*ctx, showCode, roundNum)
 	if err != nil || nil == data {
 		errMsg := "get crash game data failed"
 		log.Fatal(errMsg)
@@ -504,23 +461,29 @@ func NewRound(crashGameAddr string) error {
 }
 
 // Bet 玩家下注
-func Bet(playerWalletIndex int, crashGameAddr, betAmount string, betMultiple uint64) error {
+func Bet(playerWalletIndex int, crashGameAddr, betAmount string, betMultiple uint64, roundNum uint64) error {
+	// read from config file
+	cfg, err := GetParamsCfg()
+	if nil != err {
+		return err
+	}
+
 	if nil == TonAPI {
 		TonAPI = GetTonAPIIns()
 		if nil == TonAPI {
 			return errors.New("get ton api instance failed")
 		}
 	}
+
+	if 0 == roundNum {
+		roundNum = cfg.CrashGameCfg.RoundNum
+	}
 	// 获取玩家钱包
 	w := getWalletByIndex(TonAPI, playerWalletIndex, WalletVersion)
 	if nil == w {
 		return errors.New("generate wallet by seed words failed")
 	}
-	// read from config file
-	cfg, err := GetParamsCfg()
-	if nil != err {
-		return err
-	}
+
 	if "" == crashGameAddr {
 		crashGameAddr = cfg.CrashGameCfg.ContractAddr
 	}
@@ -533,14 +496,14 @@ func Bet(playerWalletIndex int, crashGameAddr, betAmount string, betMultiple uin
 
 	// 转账jetton token到crash game合约地址
 	// 从crash game合约中获取jetton minter地址
-	err, data := GetCrashGameData(crashGameAddr, false)
+	err, data := GetCrashGameData(crashGameAddr, false, roundNum)
 	if err != nil || nil == data {
 		return errors.New("get crash game data failed")
 	}
 	// 下注的payload:组装转账的payload转发消息, 在crash-game合约的transfer_notification中处理下注信息
 	betPayload := cell.BeginCell().
 		MustStoreUInt(OpBet, 32).
-		// MustStoreUInt(data.RoundNum, 32).
+		MustStoreUInt(roundNum, 32).
 		MustStoreUInt(betMultiple, 32).
 		EndCell()
 
@@ -720,7 +683,8 @@ func Settlement(playerWalletIndex int, crashGameAddr, settleAddr string, roundNu
 	gasFeeCoin := tlb.MustFromTON(gasFee)
 
 	// 调用结算方法
-	if err, txHash = gameWalletClient.Settlement(ctx, w, roundNum, gasFeeCoin, forwardGasFeeCoin, address.MustParseAddr(settleAddr)); err != nil {
+	if err, txHash = gameWalletClient.Settlement(ctx, w, roundNum, cfg.CrashGameCfg.MaxRoundsParallel,
+		gasFeeCoin, forwardGasFeeCoin, address.MustParseAddr(settleAddr)); err != nil {
 		log.Fatal(err)
 	}
 	log.Printf(GetScanCfg()+"transaction/%s\n", txHash)

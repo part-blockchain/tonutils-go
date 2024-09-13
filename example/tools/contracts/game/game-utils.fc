@@ -1,5 +1,11 @@
 #include "../params.fc";
 
+;; 计算round id
+(int) get_round_id_by_num(int round_num, int max_rounds_parallel) method_id {
+    throw_unless(0xff, round_num > 0);
+    return (round_num - 1) % (max_rounds_parallel);
+}
+
 ;; game_wallet
 cell pack_game_wallet_data(int round_num, int bet, int multiple, slice owner_addr, slice crash_game_addr, slice jetton_minter_address, 
                            cell jetton_wallet_code, cell game_record_code) inline {
@@ -47,9 +53,10 @@ slice calculate_user_game_wallet_address(slice owner_addr, slice crash_game_addr
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; game_record ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-cell pack_game_record_data(int round_num, int seed, int carsh_multiple, int game_state, int player_nums, slice crash_game_addr,
+cell pack_game_record_data(int round_index, int round_num, int seed, int carsh_multiple, int game_state, int player_nums, slice crash_game_addr,
                            slice jetton_minter_addr, cell jetton_wallet_code, cell game_wallet_code) inline {
    return  begin_cell()
+            .store_uint(round_index, 32)
             .store_uint(round_num, 32)
             .store_uint(seed, 32)
             .store_uint(carsh_multiple, 32)
@@ -66,12 +73,12 @@ cell pack_game_record_data(int round_num, int seed, int carsh_multiple, int game
 ;; 说明：
 ;; crash_game_addr: 指定游戏
 ;; game_record_code: 指定游戏记录代码
-cell calculate_game_record_state_init(int round_num, slice crash_game_addr, slice jetton_minter_addr, 
+cell calculate_game_record_state_init(int round_index, int round_num, slice crash_game_addr, slice jetton_minter_addr, 
                                       cell jetton_wallet_code, cell game_record_code, cell game_wallet_code) inline {
   return begin_cell()
           .store_uint(0, 2)
           .store_dict(game_record_code)
-          .store_dict(pack_game_record_data(round_num, 0, 0, 0, 0, crash_game_addr, jetton_minter_addr, jetton_wallet_code, game_wallet_code))
+          .store_dict(pack_game_record_data(round_index, 0, 0, 0, 0, 0, crash_game_addr, jetton_minter_addr, jetton_wallet_code, game_wallet_code))
           .store_uint(0, 1)
          .end_cell();
 }
@@ -84,9 +91,9 @@ slice calculate_game_record_address(cell state_init) inline {
                      .begin_parse();
 }
 
-slice calculate_user_game_record_address(int round_num, slice crash_game_addr, slice jetton_minter_addr,
+slice calculate_user_game_record_address(int round_index, int round_num, slice crash_game_addr, slice jetton_minter_addr,
                                          cell jetton_wallet_code, cell game_record_code, cell game_wallet_code) inline {
-  return calculate_game_record_address(calculate_game_record_state_init(round_num, crash_game_addr, jetton_minter_addr, 
+  return calculate_game_record_address(calculate_game_record_state_init(round_index, round_num, crash_game_addr, jetton_minter_addr, 
                                        jetton_wallet_code, game_record_code, game_wallet_code));
 }
 

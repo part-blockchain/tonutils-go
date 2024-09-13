@@ -142,12 +142,16 @@
         }
         
         ;; 保存数据
-        save_data(cur_round_num, bet_amount, multiple, owner_wallet_addr, crash_game_addr, jetton_minter_addr, jetton_wallet_code, game_record_code);
+        save_data(cur_round_num, bet_amount, multiple, owner_wallet_addr, crash_game_addr, 
+                  jetton_minter_addr, jetton_wallet_code, game_record_code);
+
         return ();
     } elseif(op == op::settlement()) {
         int cur_round_num = in_msg_body~load_uint(32);
+        int round_index = in_msg_body~load_uint(32);   ;; round_index = (round_num - 1) % (max_rounds_parallel)
         ;; 获取游戏的轮数，判断是否是结算的游戏轮
         throw_unless(Error_In_Current_Round, cur_round_num == round_num);
+        throw_unless(Error_Round_Index, round_index < round_num);
         throw_unless(Bet_Amount_Is_Zero, bet_amount > 0);
         throw_unless(Player_Multiple_Must_Greater_Zero, multiple > 0);
         ;; 转发消息到CrashGame, 包括（round_num, bet_amount, multiple）
@@ -163,7 +167,7 @@
         check_same_workchain(settle_user_addr);
 
         ;; 计算game record地址
-        slice game_record_addr = calculate_user_game_record_address(round_num, crash_game_addr, jetton_minter_addr, jetton_wallet_code, game_record_code, my_code()); 
+        slice game_record_addr = calculate_user_game_record_address(round_index, round_num, crash_game_addr, jetton_minter_addr, jetton_wallet_code, game_record_code, my_code()); 
         ;; 结算消息添加玩家信息（向game record发送消息）
         settlement(query_id, round_num, bet_amount, multiple, sender_address, settle_user_addr, game_record_addr, forward_gas_fee);
  

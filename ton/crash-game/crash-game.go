@@ -66,9 +66,8 @@ type GameInfoPeerRound struct {
 
 // Data crash game合约存储数据
 type Data struct {
-	CellGameInfos *cell.Cell //  存储游戏所有轮游戏信息
+	CellGameInfo *cell.Cell //  存储游戏游戏信息
 
-	CurrentRoundIndex uint64           // 当前轮索引
 	CurrentRoundNum   uint64           // 当前轮数
 	MaxRoundsParallel uint64           //  最大并行游戏轮数
 	MinIntervalTime   uint64           //  一轮游戏从创建完成到crash的最小时间间隔,单位秒
@@ -92,12 +91,12 @@ func NewCrashGameClient(api TonApi, crashGameContractAddr *address.Address) *Cli
 }
 
 // GetCrashGameData 获取CrashGame合约的数据信息
-func (c *Client) GetCrashGameData(ctx context.Context, showCode bool) (*Data, error) {
+func (c *Client) GetCrashGameData(ctx context.Context, showCode bool, roundNum uint64) (*Data, error) {
 	b, err := c.api.CurrentMasterchainInfo(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get masterchain info: %w", err)
 	}
-	return c.GetCrashGameDataAtBlock(ctx, b, showCode)
+	return c.GetCrashGameDataAtBlock(ctx, b, showCode, roundNum)
 }
 
 // GetUserGameWalletAddr 获取用户的游戏钱包地址
@@ -141,12 +140,12 @@ func (c *Client) GetRoundNum(ctx context.Context) (uint64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed to get masterchain info: %w", err)
 	}
-	res, err := c.api.WaitForBlock(b.SeqNo).RunGetMethod(ctx, b, c.addr, "get_info")
+	res, err := c.api.WaitForBlock(b.SeqNo).RunGetMethod(ctx, b, c.addr, "get_public_params")
 	if err != nil {
-		return 0, fmt.Errorf("failed to run get_info method by CrashGame contract: %w", err)
+		return 0, fmt.Errorf("failed to run get_public_params method by CrashGame contract: %w", err)
 	}
-	index := uint(2) // CurrentRoundNum:当前轮数, 用于统计游戏的总轮数
-	return getValueFromExecutionResult(res, &index, "roundNum", false).(*big.Int).Uint64(), nil
+	index := uint(0) // CurrentRoundNum:当前轮数, 用于统计游戏的总轮数
+	return getValueFromExecutionResult(res, &index, "CurrentRoundNum", false).(*big.Int).Uint64(), nil
 }
 
 // 从执行结果中获取对应的值
@@ -185,16 +184,15 @@ func getValueFromExecutionResult(res *ton.ExecutionResult, index *uint, keyName 
 	return value
 }
 
-func (c *Client) GetCrashGameDataAtBlock(ctx context.Context, b *ton.BlockIDExt, showCode bool) (*Data, error) {
-	res, err := c.api.WaitForBlock(b.SeqNo).RunGetMethod(ctx, b, c.addr, "get_info")
+func (c *Client) GetCrashGameDataAtBlock(ctx context.Context, b *ton.BlockIDExt, showCode bool, roundNum uint64) (*Data, error) {
+	// 获取CrashGame合约的公共数据
+	res, err := c.api.WaitForBlock(b.SeqNo).RunGetMethod(ctx, b, c.addr, "get_public_params")
 	if err != nil {
-		return nil, fmt.Errorf("failed to run get_info method by CrashGame contract: %w", err)
+		return nil, fmt.Errorf("failed to run get_public_params method by CrashGame contract: %w", err)
 	}
 
 	index := uint(0)
 	data := &Data{
-		CellGameInfos:     getValueFromExecutionResult(res, &index, "cellGameInfos", false).(*cell.Cell),            // 存储游戏所有轮游戏信息
-		CurrentRoundIndex: getValueFromExecutionResult(res, &index, "CurrentRoundIndex", false).(*big.Int).Uint64(), //  当前轮索引, 用于遍历可用的轮数
 		CurrentRoundNum:   getValueFromExecutionResult(res, &index, "CurrentRoundNum", false).(*big.Int).Uint64(),   //  当前轮数, 用于统计游戏的总轮数
 		MaxRoundsParallel: getValueFromExecutionResult(res, &index, "maxRoundsParallel", false).(*big.Int).Uint64(), //  最大并行游戏轮数
 		MinIntervalTime:   getValueFromExecutionResult(res, &index, "minIntervalTime", false).(*big.Int).Uint64(),   //  一轮游戏从创建完成到crash的最小时间间隔,单位秒
@@ -207,6 +205,16 @@ func (c *Client) GetCrashGameDataAtBlock(ctx context.Context, b *ton.BlockIDExt,
 		data.JettonWalletCode = getValueFromExecutionResult(res, &index, "jettonWalletCode", false).(*cell.Cell) //  JettonWallet合约代码
 		data.GameWalletCode = getValueFromExecutionResult(res, &index, "gameWalletCode", false).(*cell.Cell)     //  GameWallet合约代码
 		data.GameRecordCode = getValueFromExecutionResult(res, &index, "gameRecordCode", false).(*cell.Cell)     //  GameRecord合约代码
+	}
+
+	if roundNum > 0 {
+		// 获取CrashGame合约的游戏信息
+		res, err := c.api.WaitForBlock(b.SeqNo).RunGetMethod(ctx, b, c.addr, "get_game_info", roundNum)
+		if err != nil {
+			return nil, fmt.Errorf("failed to run get_game_info method by CrashGame contract: %w, roundNum:%d", err, roundNum)
+		}
+		index = 0
+		data.CellGameInfo = getValueFromExecutionResult(res, &index, "CellGameInfos", false).(*cell.Cell) //  JettonWallet合约代码
 	}
 
 	return data, nil

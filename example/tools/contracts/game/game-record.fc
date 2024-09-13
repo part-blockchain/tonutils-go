@@ -5,9 +5,10 @@
 #include "game-utils.fc";
 
 ;; load_data populates storage variables using stored data
-(int, int, int, int, int, slice, slice, cell, cell) load_data() impure {
+(int, int, int, int, int, int, slice, slice, cell, cell) load_data() impure {
     slice ds = get_data().begin_parse();
-    return (ds~load_uint(32), ;; 轮数
+    return (ds~load_uint(32), ;; 轮数索引(用于合约初始化时，生成合约地址)
+            ds~load_uint(32), ;; 轮数（不会影响合约初始化时生成的合约地址）
             ds~load_uint(32), ;; 随机数种子
             ds~load_uint(32), ;; Crash乘数
             ds~load_uint(32), ;; 游戏状态: 0-bet, 1-进行中, 2-游戏结束/未启动
@@ -21,10 +22,11 @@
 }
 
 ;; save_data stores storage variables as a cell into persistent storage
-() save_data(int round_num, int seed, int crash_multiple, int game_state, int player_nums, slice crash_game_addr, slice jetton_minter_addr,
+() save_data(int round_index, int round_num, int seed, int crash_multiple, int game_state, int player_nums, slice crash_game_addr, slice jetton_minter_addr,
              cell jetton_wallet_code, cell game_wallet_code) impure {
     set_data(
         begin_cell()
+            .store_uint(round_index, 32)
             .store_uint(round_num, 32)
             .store_uint(seed, 32)
             .store_uint(crash_multiple, 32)
@@ -66,15 +68,16 @@
     int op = in_msg_body~load_uint(32); ;; by convention, the first 32 bits of incoming message is the op
     int query_id = in_msg_body~load_uint(64); ;; also by convention, the next 64 bits contain the "query id", although this is not always the case
     
-    (int round_num, int seed, int crash_multiple, int game_state, int player_nums, slice crash_game_addr, 
+    (int round_index, int round_num, int seed, int crash_multiple, int game_state, int player_nums, slice crash_game_addr, 
      slice jetton_minter_addr, cell jetton_wallet_code, cell game_wallet_code) = load_data(); ;; here we populate the storage variables
 
     ;; 获取当前轮数
-    int cur_round_num = in_msg_body~load_uint(32);
+    int cur_round_index = in_msg_body~load_uint(32);
     if(op == op::write_record()) {
+        round_num = in_msg_body~load_uint(32);
         ;; crash_game_addr才有权限写入日志
         throw_unless(Sender_Is_Not_Crash_Game_Addr, equal_slices(sender_address, crash_game_addr));
-        throw_unless(Error_In_Current_Round, cur_round_num == round_num);
+        throw_unless(Error_In_Current_Round_Index, cur_round_index == round_index);
         throw_unless(Game_Is_Not_Start, game_state == 0);
 
         seed = in_msg_body~load_uint(32);
@@ -85,10 +88,11 @@
         player_nums = in_msg_body~load_uint(32);
 
         ;; 保存状态
-        save_data(round_num, seed, crash_multiple, 1, player_nums, crash_game_addr, jetton_minter_addr, jetton_wallet_code, game_wallet_code);
+        save_data(round_index, round_num, seed, crash_multiple, 1, player_nums, crash_game_addr, jetton_minter_addr, jetton_wallet_code, game_wallet_code);
         
         return ();
     } elseif(op == op::settlement()) {
+        int cur_round_num = in_msg_body~load_uint(32);
         int forward_fee = jetton_forward_gas_fee();
         int base_fee = base_gas_fee();
         ;; 校验手续费是否足够
@@ -129,6 +133,7 @@
         var payment_msg = begin_cell()
                 .store_uint(op::payment(), 32)
                 .store_uint(query_id, 64)
+                .store_uint(round_index, 32)
                 .store_uint(round_num, 32)
                 .store_coins(profit)
                 .store_slice(org_sender_addr) ;; 源头消息发送者，可以不是本game wallet owner发起结算请求，剩余的手续费要还给发起者
@@ -139,7 +144,7 @@
         settlement(crash_game_addr, forward_gas_fee, payment_msg);
         ;; 保存状态
         ;; 统计结算玩家的数量
-        ;; save_data(round_num, crash_multiple, game_state, player_nums, crash_game_addr, jetton_minter_addr, jetton_wallet_code);
+        ;; save_data(round_index, round_num, crash_multiple, game_state, player_nums, crash_game_addr, jetton_minter_addr, jetton_wallet_code);
         
         return ();
     }
@@ -154,6 +159,6 @@
 
 
 ;; 获取记录
-(int, int, int, int, int, slice, slice, cell, cell) get_info() method_id {
+(int, int, int, int, int, int, slice, slice, cell, cell) get_info() method_id {
     return load_data();
 }

@@ -28,9 +28,6 @@ func智能合约dict类型测试：
 1. 部署合约
 2. 获取合约信息
 */
-const (
-	DictKeyLen = 16
-)
 
 // TestDictData test dict合约存储数据
 type TestDictData struct {

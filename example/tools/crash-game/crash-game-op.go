@@ -55,11 +55,11 @@ func CrashGameOperation() {
 		case 0:
 			err = DeployCrashGame(*jettonMinterAddr, *jettonWalletCodeFile, *gameWalletCodeFile, *gameRecordCodeFile, *crashGameCodeFile)
 		case 1:
-			err, _ = GetCrashGameInfo(*crashGameAddr, *showCode)
+			err, _ = GetCrashGameInfo(*crashGameAddr, *showCode, *roundNum)
 		case 2:
 			err = NewRound(*crashGameAddr)
 		case 3:
-			err = Bet(*playerWalletIndex, *crashGameAddr, *betAmount, *betMultiple)
+			err = Bet(*playerWalletIndex, *crashGameAddr, *betAmount, *betMultiple, *roundNum)
 		case 4:
 			err = GetGameWalletInfo(*playerWalletIndex, *crashGameAddr, *playerAddr, *showCode)
 		case 5:
