@@ -12,4 +12,7 @@ const (
 	// CrashGame OpType
 	OpBet   = 0xf8a7ea5
 	OpCrash = 0x71bb125e
+
+	// game wallet opType
+	OpSettlement = 0xbbc88046
 )

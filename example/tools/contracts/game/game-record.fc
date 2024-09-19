@@ -71,9 +71,9 @@
     (int round_index, int round_num, int seed, int crash_multiple, int game_state, int player_nums, slice crash_game_addr, 
      slice jetton_minter_addr, cell jetton_wallet_code, cell game_wallet_code) = load_data(); ;; here we populate the storage variables
 
-    ;; 获取当前轮数
-    int cur_round_index = in_msg_body~load_uint(32);
     if(op == op::write_record()) {
+        ;; 获取当前轮数
+        int cur_round_index = in_msg_body~load_uint(32);
         round_num = in_msg_body~load_uint(32);
         ;; crash_game_addr才有权限写入日志
         throw_unless(Sender_Is_Not_Crash_Game_Addr, equal_slices(sender_address, crash_game_addr));

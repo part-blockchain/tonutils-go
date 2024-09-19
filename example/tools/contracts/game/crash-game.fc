@@ -203,7 +203,7 @@ const int keyLen = 16;
         int crash_round_num = in_msg_body~load_uint(32);
         throw_unless(Error_In_Current_Round,
             (crash_round_num > 0) & (crash_round_num <= storage::current_round_num) &
-            (crash_round_num >= (storage::current_round_num) - storage::max_rounds_parallel));
+            (crash_round_num > ((storage::current_round_num) - storage::max_rounds_parallel)));
 
         ;; 根据当前的round索引遍历，获取可用的roundIndex
         int key = get_round_id_by_num(crash_round_num, storage::max_rounds_parallel);

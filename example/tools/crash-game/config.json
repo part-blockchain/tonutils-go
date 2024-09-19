@@ -22,13 +22,13 @@
         "jetton_minter_addr": "EQB3P0QJS57NYXRYD5sTeCuhmEo82mLujpV00u91D6bQ2TG3"
     },
     "crash_game": {
-        "crash_game_addr": "EQAXR99vWiBLOF4ghYCGXcRHGEZ9zAIEeBvdHYNM7F6C1sVE",
+        "crash_game_addr": "EQDzyO83gRLQ14SpKYxPnuesK09PU-jJV8nepEY1OavSPw0W",
         "max_rounds_parallel": 2,
         "round_num": 2,
         "min_interval_time": 100,
         "bet": {
             "amount": "1",
-            "multiple": 106
+            "multiple": 110
         },
         "withdraw": {
             "amount": "1"

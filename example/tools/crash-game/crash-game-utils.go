@@ -462,31 +462,18 @@ func NewRound(crashGameAddr string) error {
 
 // Bet 玩家下注
 func Bet(playerWalletIndex int, crashGameAddr, betAmount string, betMultiple uint64, roundNum uint64) error {
-	// read from config file
-	cfg, err := GetParamsCfg()
-	if nil != err {
-		return err
+	cfg, w := prepareBaseEnv(playerWalletIndex)
+	if w == nil {
+		return errors.New("generate player wallet by seed words failed")
 	}
-
-	if nil == TonAPI {
-		TonAPI = GetTonAPIIns()
-		if nil == TonAPI {
-			return errors.New("get ton api instance failed")
-		}
+	if "" == crashGameAddr {
+		crashGameAddr = cfg.CrashGameCfg.ContractAddr
 	}
 
 	if 0 == roundNum {
 		roundNum = cfg.CrashGameCfg.RoundNum
 	}
-	// 获取玩家钱包
-	w := getWalletByIndex(TonAPI, playerWalletIndex, WalletVersion)
-	if nil == w {
-		return errors.New("generate wallet by seed words failed")
-	}
 
-	if "" == crashGameAddr {
-		crashGameAddr = cfg.CrashGameCfg.ContractAddr
-	}
 	if betAmount == "" {
 		betAmount = cfg.CrashGameCfg.Bet.Amount
 	}
