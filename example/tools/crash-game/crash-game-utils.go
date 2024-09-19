@@ -593,14 +593,14 @@ func Crash(crashGameAddr string, roundNum uint64) error {
 }
 
 // GetGameRecordInfo 获取游戏记录信息
-func GetGameRecordInfo(crashGameAddr string, roundIndex uint64, showCode bool) (error, *CrashGame.GameRecordData) {
+func GetGameRecordInfo(crashGameAddr string, roundNum uint64, showCode bool) (error, *CrashGame.GameRecordData) {
 	cfg, _ := prepareBaseEnv(-1)
 	if "" == crashGameAddr {
 		crashGameAddr = cfg.CrashGameCfg.ContractAddr
 	}
-	//if 0 == roundIndex {
-	//	roundIndex = cfg.CrashGameCfg.RoundNum
-	//}
+	if 0 == roundNum {
+		roundNum = cfg.CrashGameCfg.RoundNum
+	}
 	// 获取crash game client对象
 	err, pCtx, crashGame := newCrashGameClient(crashGameAddr)
 	if err != nil || nil == crashGame || nil == pCtx {
@@ -609,7 +609,7 @@ func GetGameRecordInfo(crashGameAddr string, roundIndex uint64, showCode bool) (
 	}
 
 	// 获取游戏记录地址
-	gameRecordAddr, err := crashGame.GetGameRecordAddr(*pCtx, roundIndex)
+	gameRecordAddr, err := crashGame.GetGameRecordAddr(*pCtx, roundNum)
 	if err != nil || nil == gameRecordAddr {
 		errMsg := fmt.Sprintf("get game record address failed: %s", err.Error())
 		return errors.New(errMsg), nil
@@ -666,6 +666,7 @@ func Settlement(playerWalletIndex int, crashGameAddr, settleAddr string, roundNu
 	if err != nil || nil == gameWalletAddr {
 		return errors.New("get user game wallet address failed")
 	}
+	log.Println("game wallet address:", gameWalletAddr.String())
 
 	// 构造game wallet合约客户端
 	err, ctx, gameWalletClient := newGameWalletClient(gameWalletAddr)

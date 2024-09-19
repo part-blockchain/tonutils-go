@@ -11,6 +11,7 @@ import (
 
 // GameRecordData game record合约存储数据
 type GameRecordData struct {
+	RoundIndex       uint64           //  轮数索引(用于合约初始化时，生成合约地址)
 	RoundNum         uint64           //  游戏轮数
 	Seed             uint64           //  随机数种子
 	CrashMultiple    uint64           //  爆炸倍数, 单位:%
@@ -52,6 +53,7 @@ func (c *GameRecordClient) GetGameRecordDataAtBlock(ctx context.Context, b *ton.
 
 	index := uint(0)
 	data := &GameRecordData{
+		RoundIndex:       getValueFromExecutionResult(res, &index, "RoundIndex", false).(*big.Int).Uint64(),     //  游戏轮数
 		RoundNum:         getValueFromExecutionResult(res, &index, "RoundNum", false).(*big.Int).Uint64(),       //  游戏轮数
 		Seed:             getValueFromExecutionResult(res, &index, "Seed", false).(*big.Int).Uint64(),           //  随机种子
 		CrashMultiple:    getValueFromExecutionResult(res, &index, "CrashMultiple", false).(*big.Int).Uint64(),  //  爆炸倍数
